@@ -151,11 +151,11 @@ out/<target>/
 
 ## Browser app
 
-`bbhunter serve` starts a local server (default `127.0.0.1:8080`) with a left-nav application:
+`bbhunter serve` starts a local server (default `127.0.0.1:8080`) with a top-nav, dark security workspace:
 
 | View | What it does |
 |---|---|
-| Dashboard | active scan, quick start, recent findings (grouped by title), scan history |
+| Dashboard | posture KPIs, findings trend, last-run surface coverage, prioritized queue, recent runs |
 | Targets | saved scopes with `!exclusion` rules, file import, reuse in a scan |
 | Scans | run history, hosts, finding counts, OSINT, report and log links |
 | Live scan | five stages, log, findings as they arrive, stop |

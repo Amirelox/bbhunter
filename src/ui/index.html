@@ -4,64 +4,107 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070b11">
 <title>bbhunter — dashboard</title>
 <style>/*__CSS__*/</style>
 </head>
 <body>
 <a class="skip" href="#view">Przejdź do treści</a>
 
-<div class="shell">
-  <aside class="rail">
-    <a class="brand" href="#/dashboard"><span class="brand__tick" aria-hidden="true"></span>bbhunter</a>
+<header class="topbar">
+  <div class="topbar__inner">
+    <a class="brand" href="#/dashboard" aria-label="bbhunter — przegląd">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__name">bbhunter</span>
+      <span class="brand__tag mono">recon</span>
+    </a>
 
-    <nav class="nav" aria-label="Główna">
-      <div class="nav__group">
-        <p class="nav__label">Skan</p>
-        <a class="nav__link" href="#/dashboard" data-route="dashboard">Dashboard</a>
-        <a class="nav__link" href="#/live" data-route="live">Skan na żywo<span class="nav__count" id="nav-live"></span></a>
-        <a class="nav__link" href="#/scans" data-route="scans">Skany<span class="nav__count" id="count-scans"></span></a>
-      </div>
-      <div class="nav__group">
-        <p class="nav__label">Dane</p>
-        <a class="nav__link" href="#/targets" data-route="targets">Cele</a>
-        <a class="nav__link" href="#/findings" data-route="findings">Znaleziska<span class="nav__count" id="count-findings"></span></a>
-        <a class="nav__link" href="#/osint" data-route="osint">OSINT</a>
-      </div>
-      <div class="nav__group">
-        <p class="nav__label">Wynik</p>
-        <a class="nav__link" href="#/reports" data-route="reports">Raporty</a>
-      </div>
-      <div class="nav__group">
-        <p class="nav__label">System</p>
-        <a class="nav__link" href="#/modules" data-route="modules">Moduły i reguły</a>
-        <a class="nav__link" href="#/settings" data-route="settings">Ustawienia</a>
-        <a class="nav__link" href="#/logs" data-route="logs">Logi</a>
-      </div>
+    <nav class="mainnav" id="mainnav" aria-label="Główna">
+      <a href="#/dashboard" data-route="dashboard">Przegląd</a>
+      <a href="#/scans" data-route="scans">Skany</a>
+      <a href="#/findings" data-route="findings">Znaleziska</a>
+      <a href="#/osint" data-route="osint">OSINT</a>
+      <a href="#/reports" data-route="reports">Raporty</a>
+      <a href="#/targets" data-route="targets">Cele</a>
+      <details class="more" id="more">
+        <summary>System</summary>
+        <div class="more__menu">
+          <a href="#/live" data-route="live"><span>Skan na żywo</span><span class="mono">01</span></a>
+          <a href="#/modules" data-route="modules"><span>Moduły i reguły</span><span class="mono">02</span></a>
+          <a href="#/settings" data-route="settings"><span>Ustawienia</span><span class="mono">03</span></a>
+          <a href="#/logs" data-route="logs"><span>Logi</span><span class="mono">04</span></a>
+        </div>
+      </details>
     </nav>
 
-    <div class="rail__foot">
-      <span id="rail-job">bezczynny</span>
-      <span>127.0.0.1</span>
+    <div class="topbar__right">
+      <span class="conn mono" title="Serwer lokalny"><span class="conn__dot" aria-hidden="true"></span>127.0.0.1</span>
+      <button class="nav__toggle" id="menu-toggle" type="button" aria-controls="mainnav" aria-expanded="false">Menu</button>
     </div>
-  </aside>
+  </div>
+</header>
 
-  <div class="main">
-    <header class="topbar">
-      <h1 id="page-title">Dashboard</h1>
-      <div class="topbar__right">
-        <span class="pill" id="job-pill" data-state="idle">bezczynny</span>
-        <a class="btn btn--primary" id="new-scan-btn" href="#/dashboard?new=1">Nowy skan</a>
-      </div>
-    </header>
-    <main id="view" class="view" tabindex="-1"></main>
+<div class="subbar">
+  <div class="subbar__inner">
+    <div class="subbar__titles">
+      <p class="crumb mono" id="page-crumb">workspace / przegląd</p>
+      <h1 id="page-title">Przegląd</h1>
+      <p class="subbar__sub" id="page-sub">Postawa, zasięg i kolejka ostatnich przebiegów.</p>
+    </div>
+    <div class="subbar__right">
+      <span class="pill" id="job-pill" data-state="idle"><span class="pill__dot" aria-hidden="true"></span>bezczynny</span>
+      <button class="btn btn--primary" type="button" data-action="new-scan">Nowy skan</button>
+    </div>
   </div>
 </div>
+
+<main id="view" class="view" tabindex="-1"></main>
+
+<dialog id="scan-dialog" class="dialog" aria-labelledby="scan-title">
+  <form id="scan-form" class="dialog__form" novalidate>
+    <header class="dialog__head">
+      <div>
+        <p class="eyebrow mono">nowy przebieg</p>
+        <h2 id="scan-title">Uruchom skan</h2>
+      </div>
+      <button class="iconbtn" type="button" data-close aria-label="Zamknij">×</button>
+    </header>
+    <div class="dialog__body">
+      <div class="field">
+        <label for="scan-target">Cel</label>
+        <input id="scan-target" type="text" placeholder="example.com, example.org" autocomplete="off" spellcheck="false" required>
+        <p class="hint">Kilka domen oddziel przecinkiem lub spacją — pójdą po kolei. Zakres jest sprawdzany przed startem.</p>
+      </div>
+      <div class="field">
+        <label for="scan-scope">Zakres</label>
+        <select id="scan-scope"></select>
+        <p class="hint">Puste pole = tylko podane cele. Reguły egzekwowane przed każdym requestem.</p>
+      </div>
+      <div class="choice-row">
+        <label class="choice"><input type="checkbox" id="scan-osint" checked><span>OSINT<small>RDAP, ASN, CT, chmura</small></span></label>
+        <label class="choice"><input type="checkbox" id="scan-brute"><span>Brute-force<small>słownik subdomen</small></span></label>
+        <label class="choice"><input type="checkbox" id="scan-wayback"><span>Wayback<small>historyczne URL-e</small></span></label>
+      </div>
+      <p class="error" id="scan-error" role="alert" hidden></p>
+    </div>
+    <footer class="dialog__foot">
+      <p class="hint">Skan startuje od razu. Postęp widać w widoku na żywo.</p>
+      <div class="form-actions">
+        <button class="btn btn--ghost" type="button" data-close>Anuluj</button>
+        <button class="btn btn--primary" type="submit">Uruchom skan</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
 
 <div id="scrim" class="scrim" hidden></div>
 <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
   <div class="drawer__head">
-    <h2 class="drawer__title" id="drawer-title"></h2>
-    <button class="drawer__close" id="drawer-close" aria-label="Zamknij">×</button>
+    <div>
+      <p class="eyebrow mono">ustalenie</p>
+      <h2 class="drawer__title" id="drawer-title"></h2>
+    </div>
+    <button class="iconbtn" id="drawer-close" type="button" aria-label="Zamknij">×</button>
   </div>
   <div class="drawer__body" id="drawer-body"></div>
 </aside>
