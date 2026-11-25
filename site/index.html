@@ -1,253 +1,298 @@
 <!doctype html>
-<html lang="pl">
+<html lang="pl" data-type="software">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>bbhunter — rekonesans dla bug bounty</title>
-<meta name="description" content="bbhunter zbiera subdomeny, sonduje hosty, przeszukuje JS i sprawdza well-known ścieżki. Jeden przebieg, jeden raport z ustaleniami po wadze.">
+<title>bbhunter — rekonesans, który kończy się raportem</title>
+<meta name="description" content="Cztery etapy rekonesansu w jednym binarnym pliku: subdomeny, probe, crawl i well-known ścieżki. Raport HTML offline, OSINT i zakres wymuszany przed każdym requestem.">
+<meta name="page-type" content="software">
+<meta name="site-kind" content="software">
+<meta property="og:title" content="bbhunter — rekonesans, który kończy się raportem">
+<meta property="og:description" content="Subdomeny, probe, crawl i ścieżki w jednym przebiegu. Raport offline, OSINT, twarda allowlista.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230c0e11'/%3E%3Crect x='7' y='6' width='3' height='20' fill='%23d29563'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../design/fonts.css">
-<link rel="stylesheet" href="../design/tokens.css">
-<link rel="stylesheet" href="tokens-site.css">
 <link rel="stylesheet" href="site.css">
+<script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
-<a class="skip" href="#tresc">Przejdź do treści</a>
+<a class="skip" href="#main">Przejdź do treści</a>
 
 <header class="nav">
   <div class="wrap nav__inner">
-    <a class="brand" href="#"><span class="brand__tick" aria-hidden="true"></span>bbhunter</a>
-    <nav aria-label="Główna">
-      <ul class="nav__links">
-        <li><a href="#jak-dziala">Jak działa</a></li>
-        <li><a href="#przegladarka">Przeglądarka</a></li>
-        <li><a href="#raport">Raport</a></li>
-        <li><a href="#osint">OSINT</a></li>
-        <li><a href="#bezpieczenstwo">Bezpieczeństwo</a></li>
-        <li><a href="#instalacja">Instalacja</a></li>
-      </ul>
+    <a class="brand" href="#top"><span class="brand__tick" aria-hidden="true"></span>bbhunter</a>
+    <nav id="menu" class="nav__links" aria-label="Główna">
+      <a href="#jak">Jak działa</a>
+      <a href="#raport">Raport</a>
+      <a href="#osint">OSINT</a>
+      <a href="#zakres">Zakres</a>
+      <a href="#instalacja">Instalacja</a>
+      <a class="btn btn--small" href="https://github.com/Amirelox/bbhunter" rel="noreferrer">GitHub</a>
     </nav>
+    <button class="nav__toggle" id="menu-toggle" aria-controls="menu" aria-expanded="false">Menu</button>
   </div>
 </header>
 
-<main id="tresc">
+<main id="main">
 
-  <section class="hero">
+  <!-- 01 · hero ---------------------------------------------------------- -->
+  <section class="hero" id="top">
     <div class="wrap hero__inner">
-      <div>
-        <p class="kicker"><span class="tick" aria-hidden="true"></span>rekonesans dla bug bounty · Rust</p>
-        <h1>Od domeny do raportu, jednym przebiegiem</h1>
-        <p class="lede">bbhunter zbiera subdomeny z certyfikatów, DNS i archiwów, sonduje hosty, przeszukuje JS i sprawdza well-known ścieżki. Wynik to jeden raport: ustalenia po wadze, hosty, endpointy i leady — w terminalu albo w przeglądarce.</p>
+      <div class="hero__copy">
+        <p class="kicker">rekonesans dla bug bounty · Rust</p>
+        <h1>Od domeny<br>do raportu,<br>jednym przebiegiem</h1>
+        <p class="lede">Subdomeny, probe, crawl i well-known ścieżki. Jeden binarny plik, żadnej chmury i żadnego konta — dopóki sam nie otworzysz raportu.</p>
         <div class="actions">
-          <a class="btn btn--primary" href="#przegladarka">Uruchom w przeglądarce</a>
-          <a class="btn btn--ghost" href="#instalacja">Zainstaluj CLI</a>
+          <a class="btn btn--primary" href="#instalacja">Uruchom lokalnie</a>
+          <a class="btn btn--ghost" href="assets/przyklad-raportu.html">Zobacz raport</a>
         </div>
-        <p class="hero__note">Jeden plik binarny · serwer tylko na 127.0.0.1 · raport offline</p>
+        <p class="facts">jeden plik · 127.0.0.1 · raport offline</p>
       </div>
 
-      <div class="hero__visual">
-        <div class="surfaces">
-        <div class="surface surface--term">
-          <div class="surface__label"><span>01 · terminal</span><span>bbhunter recon</span></div>
-          <pre class="term__body" tabindex="0" aria-label="Skrót przebiegu w terminalu"><span class="prompt">$</span> <span class="cmd">bbhunter recon -u 127.0.0.1:8765 --osint</span>
-<span class="ok">[+] OSINT: 1 subdomen, 0 kandydatów chmury</span>
-<span class="dim">[*] runda 1: 2 hostów (rekurencja: tak)</span>
-<span class="ok">[+] gotowe: 2 hostów, 28 ustaleń</span>
-<span class="dim">  report: ./bbhunter-out/127.0.0.1/report.html</span></pre>
-        </div>
-
-        <figure class="surface surface--app">
-          <figcaption class="surface__label"><span>02 · przeglądarka</span><span>bbhunter serve</span></figcaption>
-          <img src="assets/app-panel.png" width="1145" height="645" alt="Interfejs w przeglądarce: pasek etapów, dziennik skanu i wynik z liczbą ustaleń.">
-        </figure>
-      </div>
-        <p class="hero__caption">Prawdziwy przebieg na lokalnym fixturze testowym. Liczby zależą od celu.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="jak-dziala" aria-labelledby="jak-dziala-t">
-    <div class="wrap">
-      <div class="section__head">
-        <h2 id="jak-dziala-t"><span class="tick" aria-hidden="true"></span>Jak działa</h2>
-        <p class="section__intro">Cztery etapy w jednej komendzie, poprzedzone OSINT-em. Każdy etap zapisuje swoje artefakty, więc możesz przerwać w połowie i pracować na tym, co już masz.</p>
-      </div>
-
-      <ol class="stages">
-        <li class="stage">
-          <p class="stage__n mono">01</p>
-          <h3>Subdomeny</h3>
-          <p>crt.sh, hackertarget, OTX i urlscan, plus opcjonalny brute-force. Wildcard DNS jest wykrywany, żeby nie zalać listy fałszywkami.</p>
-        </li>
-        <li class="stage">
-          <p class="stage__n mono">02</p>
-          <h3>Probe</h3>
-          <p>HTTPS ze zejściem do HTTP, status, tytuł, technologie, IP i CNAME. Do tego audyt nagłówków, ciasteczek i CORS.</p>
-        </li>
-        <li class="stage">
-          <p class="stage__n mono">03</p>
-          <h3>Crawl</h3>
-          <p>BFS w obrębie hosta, formularze i bundle JS. Nowe hosty z linków i kodu wchodzą do kolejnej rundy i przechodzą te same etapy.</p>
-        </li>
-        <li class="stage">
-          <p class="stage__n mono">04</p>
-          <h3>Ścieżki</h3>
-          <p>Stała lista well-known ścieżek: <code>.git</code>, <code>.env</code>, actuator, swagger, GraphQL. Treść odpowiedzi jest walidowana, więc soft-404 nie robi fałszywek.</p>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <section class="section" id="przegladarka" aria-labelledby="przegladarka-t">
-    <div class="wrap">
-      <div class="section__head">
-        <h2 id="przegladarka-t"><span class="tick" aria-hidden="true"></span>Ta sama moc, bez terminala</h2>
-        <p class="section__intro">bbhunter serve stawia serwer na 127.0.0.1: dashboard, cele, skany, znaleziska i OSINT w jednym miejscu. Dziennik i etapy na żywo, a każdy skan zostawia raport i dane do triage. Bez chmury, bez konta, bez wysyłania danych poza twoją maszynę.</p>
-      </div>
-
-      <div class="browser">
-        <figure class="shot">
-          <img src="assets/app.png" width="1440" height="1000" alt="Interfejs bbhunter w przeglądarce: formularz celu i zakresu, pasek etapów, dziennik skanu i wynik z liczbą ustaleń.">
-          <figcaption>serve · 1440 px · skan z rekurencją i OSINT-em</figcaption>
-        </figure>
-        <div class="browser__side">
-          <ul class="points">
-            <li><strong>Zakres przy każdym skanie</strong><span>Allowlista z formularza jest egzekwowana tak samo jak flaga --scope. Puste pole oznacza tylko ten cel.</span></li>
-            <li><strong>Jeden skan naraz</strong><span>Drugi request dostaje 409, więc logi i pliki dwóch przebiegów się nie mieszają.</span></li>
-            <li><strong>OSINT w cenie</strong><span>Checkbox dorzuca RDAP, ASN, archiwa i chmurę; wynik leci do JSON-a obok raportu.</span></li>
-          </ul>
-          <div class="browser__cta">
-            <div class="cmdline"><span class="prompt">$</span> bbhunter serve --port 8080</div>
-            <a class="link-arrow" href="#instalacja">Jak uruchomić<span aria-hidden="true">→</span></a>
+      <div class="hero__stage" aria-label="Podgląd działania aplikacji">
+        <div class="console" id="console">
+          <div class="console__bar">
+            <span class="console__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="mono">bbhunter serve</span>
+            <span class="mono console__host">127.0.0.1:8080 · demo</span>
+          </div>
+          <div class="console__target">
+            <span class="console__field mono">example.com</span>
+            <span class="mono muted">zakres: example.com</span>
+            <span class="console__run mono">skanuj</span>
+          </div>
+          <ol class="trace" id="trace">
+            <li data-step="0" data-state="done"><b class="mono">01</b><span>subdomeny</span><em class="mono">51</em></li>
+            <li data-step="1" data-state="done"><b class="mono">02</b><span>probe</span><em class="mono">46</em></li>
+            <li data-step="2" data-state="done"><b class="mono">03</b><span>crawl</span><em class="mono">937</em></li>
+            <li data-step="3" data-state="done"><b class="mono">04</b><span>ścieżki</span><em class="mono">694</em></li>
+          </ol>
+          <div class="console__body">
+            <div class="console__log mono" id="log" aria-label="Dziennik skanu">
+              <p><span class="dim">==&gt;</span> OSINT · RDAP, ASN, archiwa</p>
+              <p><span class="ok">[+]</span> 51 subdomen, 8 nowych</p>
+              <p><span class="dim">==&gt;</span> probing 46 hostów</p>
+              <p><span class="ok">[+]</span> 46 odpowiedzi · 6 wysokich</p>
+              <p><span class="dim">==&gt;</span> crawling 40 stron</p>
+              <p><span class="ok">[+]</span> 937 URL-i · 52 pliki JS</p>
+              <p><span class="dim">==&gt;</span> ścieżki na 25 hostach</p>
+              <p><span class="ok">[+]</span> 694 sprawdzenia · 2 wystawione</p>
+              <p><span class="dim">raport →</span> bbhunter-out/example.com/report.html</p>
+            </div>
+            <div class="console__findings" id="findings">
+              <p><span class="sev sev--high">wysokie</span> CORS z poświadczeniami</p>
+              <p><span class="sev sev--high">wysokie</span> wystawiony .env</p>
+              <p><span class="sev sev--med">średnie</span> brak CSP</p>
+              <p><span class="sev sev--low">niskie</span> brak X-Content-Type</p>
+            </div>
+          </div>
+          <div class="console__foot mono">
+            <span>4 etapy</span><span>1 raport</span><span>0 chmury</span>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="raport" aria-labelledby="raport-t">
+  <!-- 02 · jak działa ---------------------------------------------------- -->
+  <section class="section" id="jak">
     <div class="wrap">
       <div class="section__head">
-        <h2 id="raport-t"><span class="tick" aria-hidden="true"></span>Raport, nie stos plików</h2>
-        <p class="section__intro">Jeden plik HTML, który otwiera się bez internetu. Obok niego JSON, JSONL i pliki z leadami, jeśli wolisz pracować w terminalu.</p>
+        <h2>Cztery etapy,<br>jedna kolejka</h2>
+        <p class="section__intro">Każdy etap zapisuje swoje artefakty, więc możesz przerwać w połowie i pracować na tym, co już masz. Nowy host z linku, JS albo przekierowania wraca do kolejki — chyba że to alias tego samego assetu.</p>
       </div>
 
-      <div class="report__grid">
-        <figure class="shot">
-          <img src="assets/raport-preview.png" width="1440" height="980" alt="Podgląd raportu bbhunter: rejestr 15 ustaleń z wagą, lista hostów i leady według rodzaju.">
-          <figcaption>raport.html · 1440 px · stan po pełnym przebiegu</figcaption>
-        </figure>
+      <ol class="pipeline">
+        <li>
+          <p class="pipeline__n mono">01</p>
+          <h3>Subdomeny</h3>
+          <p>crt.sh, certspotter, RapidDNS, OTX i urlscan. Wildcard DNS wykrywany, żeby nie zalać listy fałszywkami.</p>
+          <p class="pipeline__out mono">subdomains.txt</p>
+        </li>
+        <li>
+          <p class="pipeline__n mono">02</p>
+          <h3>Probe</h3>
+          <p>HTTPS ze zejściem do HTTP, status, tytuł, technologie, IP i CNAME. Audyt nagłówków, cookies i CORS.</p>
+          <p class="pipeline__out mono">hosts.jsonl</p>
+        </li>
+        <li>
+          <p class="pipeline__n mono">03</p>
+          <h3>Crawl</h3>
+          <p>BFS w obrębie hosta, formularze i bundle JS. Endpointy i wzorce sekretów wyciągane z kodu.</p>
+          <p class="pipeline__out mono">endpoints.txt</p>
+        </li>
+        <li>
+          <p class="pipeline__n mono">04</p>
+          <h3>Ścieżki</h3>
+          <p>Well-known pliki: <span class="mono">.git</span>, <span class="mono">.env</span>, actuator, swagger, GraphQL. Treść walidowana, więc soft-404 nie robi fałszywek.</p>
+          <p class="pipeline__out mono">findings.json</p>
+        </li>
+      </ol>
 
-        <div>
-          <ul class="points">
-            <li>
-              <strong>Waga na brzegu wiersza</strong>
-              <span>Ustalenia sortowane od najwyższych. Każdy wiersz ma 3 px brzeg i słowną wagę, więc kolor nie jest jedynym nośnikiem znaczenia.</span>
-            </li>
-            <li>
-              <strong>Ślad pokrycia</strong>
-              <span>Cztery stacje pokazują, co uruchomiono i ile z tego wyszło — zanim przewiniesz do pierwszej tabeli.</span>
-            </li>
-            <li>
-              <strong>Leady, nie wyroki</strong>
-              <span>Adresy z parametrami, panele admina i endpointy API trafiają do osobnych plików. To wejście do Burpa, nie potwierdzona podatność.</span>
-            </li>
-          </ul>
-          <a class="link-arrow" href="assets/przyklad-raportu.html">Otwórz przykładowy raport<span aria-hidden="true">→</span></a>
+      <p class="pipeline__note"><span class="tick" aria-hidden="true"></span>Do tego OSINT przed i po probe, rekurencja z limitem głębokości oraz aliasy, które nie są crawlane drugi raz.</p>
+    </div>
+  </section>
+
+  <!-- 03 · raport -------------------------------------------------------- -->
+  <section class="section" id="raport">
+    <div class="wrap report">
+      <div class="report__copy">
+        <h2>Raport,<br>który się czyta</h2>
+        <p class="section__intro">Ustalenia posortowane po wadze, hosty, endpointy i leady. Jeden HTML, który otwiera się bez internetu — obok JSON i pliki do dalszej pracy.</p>
+        <ul class="plain">
+          <li><b>Waga na brzegu wiersza</b><span>3 px i słowna etykieta; kolor nie jest jedynym nośnikiem znaczenia.</span></li>
+          <li><b>Ślad pokrycia</b><span>Cztery stacje pokazują, co uruchomiono i ile z tego wyszło.</span></li>
+          <li><b>Leady, nie wyroki</b><span>Adresy z parametrami i panele w osobnych plikach — wejście do Burpa.</span></li>
+        </ul>
+        <a class="link-underline" href="assets/przyklad-raportu.html">Otwórz przykładowy raport</a>
+      </div>
+
+      <div class="frame">
+        <div class="frame__bar">
+          <span class="mono">report.html</span>
+          <span class="mono muted">127.0.0.1 · 1440 px</span>
+        </div>
+        <div class="frame__body">
+          <iframe src="assets/przyklad-raportu.html" title="Przykładowy raport bbhunter" tabindex="-1" aria-hidden="true"></iframe>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="osint" aria-labelledby="osint-t">
-    <div class="wrap">
-      <div class="section__head">
-        <h2 id="osint-t"><span class="tick" aria-hidden="true"></span>To, czego nie widać w HTML-u</h2>
-        <p class="section__intro">OSINT jest domyślnie częścią każdego skanu: nowe subdomeny od razu wchodzą do pierwszej rundy. Osobno możesz uruchomić <code>bbhunter osint</code>.</p>
+  <!-- 04 · osint --------------------------------------------------------- -->
+  <section class="section" id="osint">
+    <div class="wrap osint">
+      <div class="osint__copy">
+        <h2>To, czego<br>nie ma w HTML-u</h2>
+        <p class="section__intro">OSINT jest częścią każdego skanu: przed probe zbiera subdomeny, RDAP i chmurę, po probe — ASN, favicony i powiązane hosty. Bez kluczy działa większość źródeł.</p>
+        <div class="osint__lists">
+          <div>
+            <h3>Bez kluczy</h3>
+            <p>Common Crawl, Wayback, RDAP, RIPE Stat, Shodan InternetDB, S3/GCS/Azure po nazwach, favicony mmh3, dorki.</p>
+          </div>
+          <div>
+            <h3>Z kluczami</h3>
+            <p>SecurityTrails, VirusTotal, Shodan DNS i favicony, GitHub code search. Brak klucza pomija źródło, nie przerywa skanu.</p>
+          </div>
+        </div>
+        <p class="callout">Nazwy bucketów to kandydaci, nie potwierdzone zasoby. 403 znaczy „nazwa zajęta”, 200 — publiczna lista. Weryfikacja własności zostaje po twojej stronie.</p>
       </div>
 
-      <div class="split">
-        <div>
-          <h3>Bez kluczy</h3>
-          <ul class="ticks">
-            <li><strong>Archiwa</strong> — Common Crawl i Wayback: stare endpointy i parametry</li>
-            <li><strong>RDAP</strong> — rejestrator, daty, nameservery</li>
-            <li><strong>ASN i prefiksy</strong> — RIPE Stat, z fallbackiem hackertarget</li>
-            <li><strong>Shodan InternetDB</strong> — porty, hosty i podatności bez klucza</li>
-            <li><strong>Chmura</strong> — S3, GCS i Azure po permutacjach nazwy, tylko HEAD</li>
-            <li><strong>Favicony</strong> — hash mmh3 i grupowanie hostów po ikonie</li>
-            <li><strong>Dorki</strong> — gotowe linki do Google, GitHuba, GitLaba, Shodana i Censysa</li>
-          </ul>
-        </div>
-        <div>
-          <h3>Z kluczami w env</h3>
-          <ul class="ticks">
-            <li><strong>SecurityTrails</strong> — subdomeny, <code>SECURITYTRAILS_API_KEY</code></li>
-            <li><strong>VirusTotal</strong> — subdomeny, <code>VT_API_KEY</code></li>
-            <li><strong>Shodan DNS i favicony</strong> — <code>SHODAN_API_KEY</code></li>
-            <li><strong>GitHub code search</strong> — <code>GITHUB_TOKEN</code></li>
-          </ul>
-          <p class="hint">Brak klucza nie przerywa przebiegu: źródło jest pomijane, a powód trafia do „Uwag”.</p>
-        </div>
-      </div>
-
-      <p class="callout"><strong>Nazwy bucketów to kandydaci, nie potwierdzone zasoby.</strong> 403 znaczy „nazwa istnieje”, 200 — publiczna lista. Narzędzie pobiera tylko nagłówki, nie zawartość, i nie twierdzi, że bucket należy do celu. Weryfikacja własności zostaje po twojej stronie.</p>
+      <figure class="map" aria-label="Mapa powiązań: domena, subdomeny, ASN, chmura i favicony">
+        <svg viewBox="0 0 620 440" role="img" aria-hidden="true" focusable="false">
+          <g class="map__lines">
+            <path d="M310 220 L120 90" />
+            <path d="M310 220 L500 80" />
+            <path d="M310 220 L540 240" />
+            <path d="M310 220 L470 370" />
+            <path d="M310 220 L150 380" />
+            <path d="M310 220 L80 250" />
+          </g>
+          <g class="map__pulse">
+            <path d="M310 220 L120 90" />
+            <path d="M310 220 L500 80" />
+            <path d="M310 220 L540 240" />
+            <path d="M310 220 L470 370" />
+            <path d="M310 220 L150 380" />
+            <path d="M310 220 L80 250" />
+          </g>
+          <g class="map__node map__node--root">
+            <circle cx="310" cy="220" r="9" />
+            <text x="310" y="250" text-anchor="middle">example.com</text>
+          </g>
+          <g class="map__node">
+            <circle cx="120" cy="90" r="5" />
+            <text x="120" y="72" text-anchor="middle">api.example.com</text>
+            <text class="map__meta" x="120" y="112" text-anchor="middle">subdomena</text>
+          </g>
+          <g class="map__node">
+            <circle cx="500" cy="80" r="5" />
+            <text x="500" y="62" text-anchor="middle">ASN 12345</text>
+            <text class="map__meta" x="500" y="102" text-anchor="middle">prefiks /20</text>
+          </g>
+          <g class="map__node">
+            <circle cx="540" cy="240" r="5" />
+            <text x="540" y="266" text-anchor="middle">favicon 8f2a</text>
+            <text class="map__meta" x="540" y="286" text-anchor="middle">3 hosty</text>
+          </g>
+          <g class="map__node">
+            <circle cx="470" cy="370" r="5" />
+            <text x="470" y="396" text-anchor="middle">s3: example-files</text>
+            <text class="map__meta" x="470" y="416" text-anchor="middle">kandydat</text>
+          </g>
+          <g class="map__node">
+            <circle cx="150" cy="380" r="5" />
+            <text x="150" y="406" text-anchor="middle">CT SAN</text>
+            <text class="map__meta" x="150" y="426" text-anchor="middle">powiązany host</text>
+          </g>
+          <g class="map__node">
+            <circle cx="80" cy="250" r="5" />
+            <text x="80" y="276" text-anchor="middle">RDAP</text>
+            <text class="map__meta" x="80" y="296" text-anchor="middle">rejestrator</text>
+          </g>
+        </svg>
+      </figure>
     </div>
   </section>
 
-  <section class="section" id="bezpieczenstwo" aria-labelledby="bezpieczenstwo-t">
-    <div class="wrap">
-      <div class="section__head">
-        <h2 id="bezpieczenstwo-t"><span class="tick" aria-hidden="true"></span>Zakres pod kontrolą</h2>
-        <p class="section__intro">Narzędzie do rekonesansu ma jedno ryzyko: za dużo ruchu w złym miejscu. Trzy mechanizmy trzymają to w ryzach.</p>
+  <!-- 05 · zakres -------------------------------------------------------- -->
+  <section class="section" id="zakres">
+    <div class="wrap scope">
+      <div class="scope__copy">
+        <h2>Zakres jest bramką,<br>nie sugestią</h2>
+        <p class="section__intro">Każdy request przechodzi przez allowlistę. Host spoza listy jest odrzucany przed wysłaniem, a nie po odpowiedzi.</p>
+        <ul class="plain">
+          <li><b>Allowlista i wykluczenia</b><span><span class="mono">!dev.example.com</span> wygrywa z regułą ogólną.</span></li>
+          <li><b>Jeden skan naraz</b><span>Drugi request dostaje 409, więc logi dwóch przebiegów się nie mieszają.</span></li>
+          <li><b>Tempo pod kontrolą</b><span>Globalny rate limit, cap współbieżności, timeouty i limity rozmiaru odpowiedzi.</span></li>
+        </ul>
       </div>
 
-      <div class="safety">
-        <div class="safety__item">
-          <h3>Allowlista jest bramką</h3>
-          <p>Każdy request przechodzi przez plik <code>scope</code>. Bez niego narzędzie odmawia startu, a hosty spoza listy są odrzucane przed wysłaniem.</p>
-        </div>
-        <div class="safety__item">
-          <h3>Tempo pod kontrolą</h3>
-          <p>Globalny limit req/s, cap współbieżności, timeouty i twarde limity rozmiaru odpowiedzi. Domyślnie 25 req/s, nie „jak najszybciej”.</p>
-        </div>
-        <div class="safety__item">
-          <h3>Tylko odczyt</h3>
-          <p>Jedno GET na well-known ścieżkę. Zero payloadów, zero fuzzowania, zero mutacji. Wynik to tropy do potwierdzenia, nie zgłoszenia.</p>
-        </div>
+      <div class="doc">
+        <div class="doc__bar mono"><span>scope.txt</span><span class="muted">allowlista</span></div>
+        <pre class="doc__body mono"><span class="dim"># jedna reguła na linię</span>
+example.com
+*.example.org
+<span class="ok">!dev.example.com</span>   <span class="dim"># wykluczenie</span>
+api-*.lab.net</pre>
+        <div class="doc__foot mono">odrzucone przed requestem · 25 req/s domyślnie</div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="instalacja" aria-labelledby="instalacja-t">
-    <div class="wrap">
-      <div class="section__head">
-        <h2 id="instalacja-t"><span class="tick" aria-hidden="true"></span>Instalacja</h2>
-        <p class="section__intro">Stabilny Rust, testowane na 1.94. Reszta to jedna komenda i plik z zakresem.</p>
+  <!-- 06 · instalacja ---------------------------------------------------- -->
+  <section class="section" id="instalacja">
+    <div class="wrap install">
+      <div class="install__copy">
+        <h2>Uruchom<br>u siebie</h2>
+        <p class="section__intro">Stabilny Rust, jeden plik binarny. Aplikacja i raport działają lokalnie; nic nie wychodzi poza twoją maszynę poza requestami do celu i publicznych API.</p>
+        <p class="facts">Rust 1.94 · 127.0.0.1 · raport offline</p>
+        <a class="link-underline" href="https://github.com/Amirelox/bbhunter" rel="noreferrer">Kod i zgłoszenia na GitHubie</a>
       </div>
 
-      <div class="install">
-        <pre class="code"><span class="comment"># zbuduj i zainstaluj binarkę</span>
-cargo build --release
+      <div class="cmd">
+        <div class="cmd__bar mono"><span>terminal</span><button class="copy" id="copy" type="button">Kopiuj</button></div>
+        <pre class="cmd__body mono" id="cmd">cargo build --release
 cargo install --path .
 
-<span class="comment"># wskaż zakres i uruchom pełny przebieg (OSINT jest domyślnie włączony)</span>
-bbhunter recon -d example.com --scope scope.txt --brute --wayback
+bbhunter serve --port 8080
 
-<span class="comment"># albo w przeglądarce</span>
-bbhunter serve --port 8080</pre>
-        <p class="hint">Plik <code>scope.txt</code> ma jedną regułę na linię: <code>example.com</code> obejmuje też subdomeny, a <code>*.example.org</code> to glob. Wzór jest w <code>scope.example.txt</code>.</p>
+<span class="dim"># pełny przebieg z terminala</span>
+bbhunter recon -d example.com --scope scope.txt</pre>
+        <div class="cmd__foot mono">→ http://127.0.0.1:8080</div>
       </div>
     </div>
   </section>
-
 </main>
 
 <footer class="footer">
   <div class="wrap footer__inner">
-    <p class="footer__note">Używaj tylko na celach, na które masz zgodę: programy bug bounty, własne systemy albo pisemne upoważnienie. Automatyczne wyniki wymagają potwierdzenia.</p>
-    <p class="mono">bbhunter 0.1.0 · Rust · raport offline</p>
+    <p>bbhunter · rekonesans dla bug bounty. Używaj tylko na celach, na które masz zgodę.</p>
+    <p class="mono">Rust · raport offline · <a href="https://github.com/Amirelox/bbhunter" rel="noreferrer">GitHub</a></p>
   </div>
 </footer>
+
+<script src="site.js?v=2"></script>
 </body>
 </html>

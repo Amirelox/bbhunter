@@ -241,14 +241,17 @@ The landing page in `site/` uses the same tokens as the report.
 
 ```
 site/
-├── index.html                 # hero, stages, browser app, report, OSINT, safety, install
-├── site.css                   # page components
-├── tokens-site.css            # presentation scale (64 px hero, section rhythm)
+├── index.html                 # hero, pipeline, report, OSINT, scope, install
+├── site.css                   # one section per screen, product-first layout
+├── site.js                    # mobile menu, copy command, one hero scan sequence
 └── assets/
-    ├── app.png / app-panel.png    # real app screenshots
-    ├── raport-preview.png         # cropped report screenshot
-    └── przyklad-raportu.html      # full, working offline report
+    └── przyklad-raportu.html  # full, working offline report (embedded in the page)
 ```
+
+The page shows the product rather than screenshots: a live HTML console runs a demo scan once on
+load, the report section embeds the real report, and the OSINT section is a small SVG map with
+animated pulses. Motion is limited to the hero entrance, that scan, the map and hover states; all
+of it is disabled under `prefers-reduced-motion`.
 
 ```bash
 xdg-open site/index.html
