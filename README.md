@@ -1,48 +1,50 @@
 # bbhunter
 
-All-in-one recon toolkit do bug bounty / pentestów **na cele, na które masz zgodę**.
-Jeden binarny plik: passive subdomeny → DNS → probe HTTP → crawl/JS → low-hanging checks → triage → raport (MD + HTML + JSON).
+All-in-one recon toolkit for bug bounty and pentests, **on targets you are allowed to test**.
+One binary: passive subdomains → HTTP probe → crawl/JS → well-known paths → triage → report
+(Markdown + HTML + JSON), plus a local browser app and an OSINT stage.
 
-> To nie jest exploit framework. Narzędzie robi rekonesans i niskoszkodliwe testy konfiguracji
-> (GET na well-known ścieżki, nagłówki, CORS, cookies). Każdy wynik to trop do ręcznej weryfikacji,
-> nie potwierdzona podatność.
+> This is not an exploit framework. It does recon and low-impact configuration checks
+> (single GETs on well-known paths, headers, cookies, CORS). Every result is a lead for
+> manual verification, not a confirmed vulnerability.
 
-## Bezpieczeństwo / scope
+## Safety and scope
 
-Każdy request przechodzi przez allowlistę (`--scope`). Bez pliku scope narzędzie **odmówi pracy**,
-chyba że jawnie podasz `--no-scope-check` (tylko lab / localhost).
+Every request goes through an allowlist (`--scope`). Without a scope file the tool **refuses to
+run**, unless you explicitly pass `--no-scope-check` (lab/localhost only).
 
 ```txt
 # scope.txt
-example.com          # example.com + wszystkie subdomeny
+example.com          # example.com and every subdomain
 *.example.org        # glob
 api-*.lab.net
+!dev.example.com     # exclusion wins over an allow rule
 ```
 
-Hosty spoza listy są odrzucane jeszcze przed wysłaniem requestu, a wyniki passive enum są
-filtrowane końcowo. Dodatkowo: globalny rate limit, cap współbieżności, timeouty i twarde limity
-rozmiaru odpowiedzi.
+Hosts outside the list are rejected before the request is sent, and passive enumeration results are
+filtered again at the end. On top of that: a global rate limit, a concurrency cap, timeouts and hard
+response size limits.
 
 ## Build
 
 ```bash
-cargo build --release          # binarka: target/release/bbhunter
-cargo install --path .         # albo do ~/.cargo/bin
+cargo build --release          # binary: target/release/bbhunter
+cargo install --path .         # or into ~/.cargo/bin
 ```
 
-Wymaga stabilnego Rusta (testowane na 1.94). Sieć: wymagany dostęp do crt.sh, hackertarget,
-OTX, urlscan i web.archive.org (część źródeł może być chwilowo niedostępna — reszta działa).
+Stable Rust (tested on 1.94). Network access to crt.sh, hackertarget, OTX, urlscan and
+web.archive.org is required; some sources may be temporarily unavailable while the rest still work.
 
-## Szybki start
+## Quick start
 
 ```bash
-# aplikacja w przeglądarce (formularz + live log + raport)
+# browser app (dashboard, live log, report)
 bbhunter serve --port 8080        # → http://127.0.0.1:8080
 
-# pełny pipeline z terminala
+# full pipeline from the terminal
 bbhunter recon -d example.com --scope scope.txt --brute --wayback -o ./out
 
-# pojedyncze etapy
+# single stages
 bbhunter subs  -d example.com --scope scope.txt > subs.txt
 bbhunter probe -l subs.txt --scope scope.txt
 bbhunter crawl -l live_hosts.txt --scope scope.txt --max-pages 50
@@ -50,53 +52,61 @@ bbhunter paths -u https://example.com --scope scope.txt --limit 20
 bbhunter urls  -d example.com --scope scope.txt > wayback.txt
 ```
 
-Globalne flagi: `--concurrency` (domyślnie 20), `--rate` req/s (25), `--timeout` (10 s),
-`-o/--out`, `-q`, `--show-secrets`, `--proxy` (np. Burp) oraz `-H "Name: Value"` (auth/cookies,
-można powtarzać; działa też `BBHUNTER_PROXY`).
+Global flags: `--concurrency` (20), `--rate` req/s (25), `--timeout` (10 s), `-o/--out`, `-q`,
+`--show-secrets`, `--proxy` (e.g. Burp) and `-H "Name: Value"` (auth/cookies, repeatable;
+`BBHUNTER_PROXY` also works).
 
 ```bash
-# przez Burpa, z sesją
+# through Burp, with a session
 bbhunter recon -d example.com --scope scope.txt \
   --proxy http://127.0.0.1:8080 \
   -H "Cookie: session=..." -H "Authorization: Bearer ..."
 ```
 
-## Co robi `recon`
+## What `recon` does
 
-| Etap | Moduł | Opis |
+| Stage | Module | Description |
 |---|---|---|
-| 1. Subdomeny | `subs.rs` | crt.sh, hackertarget, AlienVault OTX, urlscan + opcjonalny brute-force (wbudowana lista ~230 słów + własny wordlist) z detekcją wildcard DNS |
-| 2. Probe | `probe.rs` | HTTPS→HTTP fallback, status, title, tech fingerprint, IP/CNAME, audyt nagłówków, cookies, CORS, błędy/stack trace |
-| 3. Crawl | `crawl.rs` | BFS w obrębie hosta, linki/iframe/formularze, bundle JS, ekstrakcja endpointów, regex na sekrety (AWS, Stripe, Google, GitHub, JWT, klucze prywatne, generyczne `api_key=`) |
-| 4. Paths | `paths.rs` | stała lista well-known ścieżek, po jednym GET: `.git`, `.env`, `.DS_Store`, `.svn`, `robots.txt`, `sitemap.xml`, `security.txt`, `server-status`, `phpinfo`, `actuator/*`, `metrics`, swagger/openapi, GraphQL, OIDC |
-| 5. Wayback | `wayback.rs` | CDX API → historyczne URL-e (filtrowane do scope) |
-| 6. Triage | `triage.rs` | buckety: admin-panels, debug-staging, auth-endpoints, api-endpoints, payment-checkout, file-upload, redirect-params, urls-with-params, user-account |
-| 7. Rekurencja | `pipeline.rs` | Host odkryty w linku, JS, robots/sitemap albo przekierowaniu wchodzi do kolejnej rundy i przechodzi te same etapy. Limity: `--depth` (domyślnie 2), `--max-hosts` (500), `--no-recurse` wyłącza |
-| 8. Raport | `report.rs` | `report.md`, `report.html`, `findings.json`, `hosts.jsonl`, pliki per-bucket |
+| 1. Subdomains | `subs.rs` | crt.sh, hackertarget, AlienVault OTX, urlscan + optional brute force (built-in ~230-word list plus your own) with wildcard DNS detection |
+| 2. Probe | `probe.rs` | HTTPS→HTTP fallback, status, title, tech fingerprint, IP/CNAME, header audit, cookies, CORS, error/stack-trace leaks |
+| 3. Crawl | `crawl.rs` | same-host BFS, links/iframes/forms, JS bundles, endpoint extraction, secret regexes (AWS, Stripe, Google, GitHub, JWT, private keys, generic `api_key=`) |
+| 4. Paths | `paths.rs` | fixed well-known list, one GET each: `.git`, `.env`, `.DS_Store`, `.svn`, `robots.txt`, `sitemap.xml`, `security.txt`, `server-status`, `phpinfo`, `actuator/*`, `metrics`, swagger/openapi, GraphQL, OIDC |
+| 5. Wayback | `wayback.rs` | CDX API → historical URLs (filtered to scope) |
+| 6. Triage | `triage.rs` | buckets: admin-panels, debug-staging, auth-endpoints, api-endpoints, payment-checkout, file-upload, redirect-params, urls-with-params, user-account |
+| 7. Recursion | `pipeline.rs` | A host found in a link, JS file, robots/sitemap or redirect joins the next round and goes through the same stages. Bounded by `--depth` (2), `--max-hosts` (500); `--no-recurse` disables it |
+| 8. Report | `report.rs` | `report.md`, `report.html`, `findings.json`, `hosts.jsonl`, per-bucket files |
 
-Ważne: `paths` i crawl dostają **priorytetowo** hosty oznaczone jako dev/staging/admin/api,
-a liczbę hostów do kosztownych sprawdzeń ograniczają `--paths-hosts` i `--crawl-hosts`.
+Crawl and path checks **prioritise** dev/staging/admin/api hosts, and `--paths-hosts` /
+`--crawl-hosts` cap the expensive work per round.
 
-**Rekurencja.** Nowy host nie jest tylko dopisywany do raportu — trafia do kolejnej rundy:
-probe → crawl → paths, a jego własne odkrycia zasilają następną rundę. Każdy host nadal musi
-przejść przez allowlistę, a budżet (`--max-hosts`) i głębokość (`--depth`) trzymają skan w ryzach.
-Żeby to wyłączyć: `--no-recurse`. W UI odpowiada za to checkbox „Skanuj odkryte hosty".
+**Recursion.** A newly discovered host is not just appended to the report — it enters the next
+round: probe → crawl → paths, and its own findings feed the following round. Every host still has
+to pass the allowlist, while `--max-hosts` and `--depth` keep the scan bounded. Disable with
+`--no-recurse` (the UI exposes the same switch).
 
-## Struktura outputu
+## Output layout
 
 ```
 out/<target>/
-├── report.md / report.html      # raport dla człowieka
-├── findings.json                # maszynowo: severity, category, host, url, evidence
-├── manifest.json                # metadane + liczniki
-├── hosts.jsonl                  # jeden JSON na live host
+├── report.md / report.html      # human-readable report
+├── findings.json                # machine-readable: severity, category, host, url, evidence
+├── manifest.json                # metadata and counters
+├── hosts.jsonl                  # one JSON per live host
 ├── subdomains.txt
 ├── live_hosts.txt               # host, status, tech, title, final_url
 ├── urls.txt
-├── endpoints.txt                # endpointy wyciągnięte z HTML/JS
+├── endpoints.txt                # endpoints extracted from HTML/JS
 ├── js_files.txt
 ├── forms.txt
-├── secrets.txt                  # domyślnie zredagowane (--show-secrets = pełne)
+├── secrets.txt                  # redacted by default (--show-secrets for full values)
+├── run.log                      # raw log (web scans)
+├── triage.json                  # finding status and notes (web app)
+├── osint/                       # when OSINT ran
+│   ├── osint.md / osint.json
+│   ├── subdomains.txt
+│   ├── cloud.txt
+│   ├── dorks.txt
+│   └── favicons.txt
 └── interesting/
     ├── admin-panels.txt
     ├── debug-staging.txt
@@ -109,178 +119,182 @@ out/<target>/
     └── user-account.txt
 ```
 
-## Warstwa wizualna
+## Browser app
 
-Raport HTML to osobny system, trzymany poza Rustem — `src/report.rs` tylko składa semantyczny
-markup i włącza CSS przez `include_str!`. Zmiana wyglądu nie wymaga dotykania logiki skanu.
+`bbhunter serve` starts a local server (default `127.0.0.1:8080`) with a left-nav application:
 
-```
-design/
-├── direction.md     # kierunek: produkt, charakter, świat, momenty, sygnatura
-├── foundations.md   # paleta, zmierzone kontrasty, skala typu, siatka, breakpointy
-├── tokens.css       # jedyne źródło wartości (kolory, odstępy, typografia, ruch)
-├── report.css       # komponenty raportu, wyłącznie na tokenach semantycznych
-├── fonts.css        # Instrument Sans + JetBrains Mono, subset latin/latin-ext, offline
-├── review.md        # przegląd: znaleziska, poprawki, weryfikacja, werdykt
-├── closure.md       # spójność z kierunkiem, świadome pominięcia, kolejne kroki
-└── screens/         # zrzuty 1440 / 720 / 320, stan pusty i częściowy, szkielet
-```
-
-Zasady: zero gradientów, poświat i cieni kolorowych; kolor wagi nigdy nie jest jedynym nośnikiem
-znaczenia; panele płaskie (promień 0), zaokrąglenie tylko na znaczniku; jeden akcent (miedź) i tylko
-tam, gdzie wskazuje strukturę. Raport jest po polsku, CLI zostaje po angielsku (identyfikatory,
-flagi, logi).
-
-## Aplikacja w przeglądarce
-
-`bbhunter serve` uruchamia lokalny serwer (domyślnie `127.0.0.1:8080`) z aplikacją w przeglądarce:
-lewą nawigacją i dziesięcioma widokami.
-
-| Widok | Co robi |
+| View | What it does |
 |---|---|
-| Dashboard | aktywny skan, szybki start, ostatnie znaleziska (grupowane po tytule), historia |
-| Cele | zapisane zakresy z regułami `!wykluczenie`, import z pliku, użycie w skanie |
-| Skany | historia przebiegów, hosty, liczba ustaleń, OSINT, linki do raportu i logu |
-| Skan na żywo | pięć etapów, dziennik, napływające znaleziska, stop |
-| Znaleziska | filtry wagi/statusu/szukanie, drawer z dowodem, triage i notatki |
-| OSINT | RDAP, ASN, chmura, favicony, dorki, kod |
-| Raporty | HTML/Markdown/JSON, szablon zgłoszenia do schowka |
-| Moduły i reguły | przełączniki etapów i własne ścieżki; DSL jest zaplanowany |
-| Ustawienia | rate, współbieżność, timeout, limity, proxy, status kluczy API |
-| Logi | surowy log ostatniego lub wybranego przebiegu |
+| Dashboard | active scan, quick start, recent findings (grouped by title), scan history |
+| Targets | saved scopes with `!exclusion` rules, file import, reuse in a scan |
+| Scans | run history, hosts, finding counts, OSINT, report and log links |
+| Live scan | five stages, log, findings as they arrive, stop |
+| Findings | severity/status filters, search, detail drawer with evidence, triage and notes |
+| OSINT | RDAP, ASN, cloud candidates, favicons, dorks, public code |
+| Reports | HTML/Markdown/JSON, issue template copied to the clipboard |
+| Modules | stage toggles and custom paths; a rule DSL is planned |
+| Settings | rate, concurrency, timeout, limits, proxy, API key status |
+| Logs | raw log of the latest or selected run |
 
-Dane aplikacji leżą w `bbhunter-out/`: `settings.json`, `scopes.json`, a przy każdym celu
-`run.log` i `triage.json` (statusy i notatki znalezisk). `--proxy` z Ustawień obowiązuje przy
-następnym skanie; klucze API są czytane ze środowiska serwera.
+App state lives in `bbhunter-out/`: `settings.json`, `scopes.json`, and per target a `run.log` and
+`triage.json` (finding statuses and notes). Settings apply to the next scan; API keys are read from
+the server environment.
 
 ```bash
 bbhunter serve --port 8080
 xdg-open http://127.0.0.1:8080
 ```
 
-- **Zakres jest wpisywany przy skanie** i egzekwowany tak samo jak w CLI. Puste pole = tylko ten cel.
-- **Jeden skan naraz.** Drugi request dostaje `409`, żeby dwa przebiegi nie mieszały logów.
-- Serwer słucha tylko na `127.0.0.1` i nie ma autoryzacji — to narzędzie lokalne, nie usługa sieciowa.
-- Interfejs jest wbudowany w binarkę (`src/ui/` przez `include_str!`), więc nie ma builda frontendu.
-- `GET /report/{id}` serwuje wygenerowany raport HTML; `GET /api/scan/{id}` to stan i logi (polling).
+- **The scope is entered per scan** and enforced exactly like the CLI. An empty field means that
+  target only.
+- **One scan at a time.** A second request gets `409` so two runs cannot mix logs.
+- The server binds to `127.0.0.1` only and has no auth — it is a local tool, not a network service.
+- The UI is embedded in the binary (`src/ui/` via `include_str!`), so there is no frontend build.
+- `GET /report/{id}` serves the generated HTML report; `GET /api/scan/{id}` returns state and logs
+  (polling). Historical runs are exposed under `/api/runs/{id}/…`.
 
 ## OSINT
 
-Osobna komenda obok skanu: zbiera to, czego nie widzi sam probe/crawl, i nie wysyła ruchu do
-aplikacji poza scope (poza HEAD-ami do nazw bucketów i zapytaniami do publicznych API).
+A separate command alongside the scan: it collects what probe/crawl cannot see and sends no traffic
+to the target's application beyond HEADs for bucket names and public API queries.
 
 ```bash
 bbhunter osint -d example.com --scope scope.txt -l live_hosts.txt
-# artefakty: bbhunter-out/example.com/osint/{osint.md,osint.json,subdomains.txt,cloud.txt,dorks.txt,favicons.txt}
+# artefacts: bbhunter-out/example.com/osint/{osint.md,osint.json,subdomains.txt,cloud.txt,dorks.txt,favicons.txt}
 ```
 
-OSINT jest też etapem skanu:
+OSINT is also a scan stage, **enabled by default** in every `recon` and in the UI. New subdomains
+join the first scan round, artefacts land in `bbhunter-out/example.com/osint/`, and the report gains
+an “OSINT” block in the sidebar. Disable with `--no-osint` or by unchecking the box in the UI.
 
-```bash
-OSINT jest **domyślnie włączony** w każdym `recon` i w UI. Nowe subdomeny wchodzą do pierwszej
-rundy skanu, artefakty lądują w `bbhunter-out/example.com/osint/`, a w raporcie pojawia się blok
-„OSINT” w szynie. Wyłączenie: `--no-osint` w CLI albo odznaczenie checkboxa w UI.
-
-Co robi:
-
-| Obszar | Źródło | Klucz |
+| Area | Source | Key |
 |---|---|---|
-| Pasywne subdomeny | crt.sh, hackertarget, OTX, urlscan | nie |
-| Archiwa | Common Crawl index (najnowszy), Wayback (przez `--wayback` w recon) | nie |
-| WHOIS / RDAP | rdap.org | nie |
-| ASN, prefiksy | RIPE Stat, fallback hackertarget | nie |
-| Shodan bez klucza | internetdb.shodan.io (porty, hosty, podatności) | nie |
-| Publiczny kod | grep.app (często blokuje boty), dorki GitHub/GitLab/Google | nie |
-| SecurityTrails | API v1 subdomeny | `SECURITYTRAILS_API_KEY` |
-| VirusTotal | API v3 subdomeny | `VT_API_KEY` |
+| Passive subdomains | crt.sh, hackertarget, OTX, urlscan | no |
+| Archives | Common Crawl index (latest), Wayback (via `--wayback` in recon) | no |
+| WHOIS / RDAP | rdap.org | no |
+| ASN, prefixes | RIPE Stat, hackertarget fallback | no |
+| Shodan without a key | internetdb.shodan.io (ports, hostnames, vulns) | no |
+| Public code | grep.app (often blocks bots), GitHub/GitLab/Google dorks | no |
+| SecurityTrails | API v1 subdomains | `SECURITYTRAILS_API_KEY` |
+| VirusTotal | API v3 subdomains | `VT_API_KEY` |
 | GitHub code search | `/search/code` | `GITHUB_TOKEN` |
-| Favicon → inne hosty | hash mmh3 + `http.favicon.hash` | `SHODAN_API_KEY` |
-| Chmura | S3 / GCS / Azure Blob po permutacjach nazwy | nie |
+| Favicon → other hosts | mmh3 hash + `http.favicon.hash` | `SHODAN_API_KEY` |
+| Cloud | S3 / GCS / Azure Blob over name permutations | no |
 
-Ważne: **nazwy bucketów to kandydaci**, a nie potwierdzone zasoby. `403` znaczy „nazwa istnieje”,
-`200` — publiczna lista; to mogą być cudze buckety. Narzędzie nie pobiera zawartości, tylko nagłówki,
-i nie twierdzi, że należą do celu.
+**Bucket names are candidates, not confirmed assets.** `403` means “the name exists”, `200` means a
+public listing; those buckets may belong to someone else. The tool only reads headers, never object
+contents, and does not claim ownership.
 
-Brak klucza nie wywala przebiegu — źródło jest pomijane, a powód trafia do sekcji „Uwagi”.
-Dorki są generowane jako linki (bez scrapowania Google), więc nie łamią ToS.
+A missing key never aborts a run — that source is skipped and the reason is written to “Notes”.
+Dorks are generated as links (no Google scraping), so they do not break ToS.
 
-## Strona produktu
+## Product site
 
-Landing page leży w `site/` i korzysta z tych samych tokenów co raport.
+The landing page in `site/` uses the same tokens as the report.
 
 ```
 site/
-├── index.html                 # jeden ekran: hero, etapy, raport, bezpieczeństwo, instalacja
-├── site.css                   # komponenty strony
-├── tokens-site.css            # skala presentacyjna (hero 64 px, rytm sekcji)
+├── index.html                 # hero, stages, browser app, report, OSINT, safety, install
+├── site.css                   # page components
+├── tokens-site.css            # presentation scale (64 px hero, section rhythm)
 └── assets/
-    ├── raport-preview.png     # realny zrzut raportu (przycięty)
-    └── przyklad-raportu.html  # pełny, działający raport offline
+    ├── app.png / app-panel.png    # real app screenshots
+    ├── raport-preview.png         # cropped report screenshot
+    └── przyklad-raportu.html      # full, working offline report
 ```
-
-Otwarcie lokalnie:
 
 ```bash
 xdg-open site/index.html
+# or, from the repo root:
+python3 -m http.server 8081 --bind 127.0.0.1   # → http://127.0.0.1:8081/site/
 ```
 
-Strona linkuje `../design/fonts.css` i `../design/tokens.css`, więc działa z wnętrza repo. Przy
-wdrożeniu na serwer zamień data-URI w fontach na pliki `woff2` i przenieś tokeny do jednego arkusza.
+Serve it from the repo root: the page links `../design/fonts.css` and `../design/tokens.css`. For a
+real deployment, replace the data-URI fonts with `woff2` files and bundle the tokens.
 
-## Architektura
+## Architecture
 
 ```
 src/
-├── main.rs      # CLI, dispatch komend
-├── cli.rs       # clap, walidacja targetów
-├── pipeline.rs  # pełny przebieg recon, wspólny dla CLI i web
-├── web.rs       # lokalny serwer axum: /, /api/scan, /report, UI w binarce
-├── ui/          # index.html + ui.css + ui.js (wbudowane przez include_str!)
-├── scope.rs     # allowlista (globset) + twarda bramka
-├── http.rs      # klient, connection pool, semafor, rate limiter, cap body
+├── main.rs      # CLI, command dispatch
+├── cli.rs       # clap, target validation
+├── pipeline.rs  # full recon run, shared by CLI and web
+├── web.rs       # local axum server: UI, /api/scan, /api/runs, reports
+├── ui/          # index.html + ui.css + ui.js (embedded via include_str!)
+├── scope.rs     # allowlist and exclusions (globset), hard gate
+├── http.rs      # client, pool, semaphore, rate limiter, body cap
 ├── dnsx.rs      # hickory-resolver, wildcard detection
-├── subs.rs      # źródła passive + brute
-├── probe.rs     # probe + audyty (headers/cookies/CORS/disclosure)
-├── tech.rs      # fingerprinty (nagłówki, body, cookies)
-├── crawl.rs     # crawler + ekstrakcja endpointów + sekrety
-├── paths.rs     # well-known paths z walidacją odpowiedzi
-├── triage.rs    # klasyfikacja URL/hostów do bucketów
+├── subs.rs      # passive sources and brute force
+├── probe.rs     # probe and audits (headers/cookies/CORS/disclosure)
+├── tech.rs      # fingerprints (headers, body, cookies)
+├── crawl.rs     # crawler, endpoint extraction, secrets
+├── paths.rs     # well-known and custom paths with response validation
+├── osint.rs     # RDAP, ASN, archives, cloud names, favicons, dorks
+├── triage.rs    # URL/host classification into buckets
 ├── wayback.rs   # CDX
-├── findings.rs  # model Findingu + dedupe + sort
-├── report.rs    # MD/HTML/JSON/JSONL
-├── log.rs       # kolorowy output na stderr (dane na stdout)
-└── util.rs      # normalizacja hostów, portów, domen rejestrowalnych
+├── findings.rs  # Finding model, dedupe, sort, stages
+├── report.rs    # Markdown/HTML/JSON/JSONL
+├── log.rs       # coloured stderr output and capture for the UI
+└── util.rs      # host/port/registrable-domain normalisation
 ```
 
-### Rozszerzanie
+### Extending
 
-- **Nowy fingerprint** — dopisz wpis do `HEADER_RULES` / `BODY_RULES` w `tech.rs`.
-- **Nowa ścieżka** — dodaj do `CHECKS` i obsłuż walidację w `classify()` (`paths.rs`).
-  Walidacja treści jest kluczowa: 200 na `/.env` bywa soft-404.
-- **Nowy sekret** — regex do `SECRET_RULES` w `crawl.rs`.
-- **Nowe źródło subdomen** — funkcja `async fn source(http, root) -> Vec<String>` + wpis w tablicy `sources`.
-- **Nowy bucket triage** — stała + reguła w `Triage::add_url`, output pojawi się automatycznie.
-- **Własny wordlist** — `--wordlist plik.txt` (jedna etykieta na linię).
+- **New fingerprint** — add an entry to `HEADER_RULES` / `BODY_RULES` in `tech.rs`.
+- **New built-in path** — add it to `CHECKS` and validate the response in `classify()` (`paths.rs`).
+  Content validation matters: a 200 on `/.env` is often a soft-404.
+- **New secret pattern** — add a regex to `SECRET_RULES` in `crawl.rs`.
+- **New subdomain source** — write `async fn source(http, root) -> Vec<String>` and add it to the
+  source list.
+- **New triage bucket** — a constant plus a rule in `Triage::add_url`; outputs appear automatically.
+- **New OSINT source** — a function returning `(Vec<String>, Option<String>)` (values + skip reason)
+  and a row in the report.
+- **Custom paths** — UI → Modules; they are checked with a single GET and a soft-404 guard.
+- **Custom wordlist** — `--wordlist file.txt` (one label per line).
 
-## Ograniczenia (świadome)
+## Design system
 
-- Brak renderowania JS — strony SPA dają tylko to, co jest w HTML/JS źródłowym.
-  Dla pełnego pokrycia podłącz headless Chrome (`chromiumoxide`) jako kolejny etap.
-- Brak testów inwazyjnych: żadnych payloadów, fuzzowania parametrów, auth bypassu, uploadów.
-  To zostaje dla Burpa/ffuf/nuclei — `urls.txt` i `interesting/*` są do nich wejściem.
-- `paths` to znane ścieżki, nie brute-force katalogów.
-- TLS: brak inspekcji łańcucha certyfikatów / JA3 (możliwe jako rozszerzenie na `rustls`).
-- IPv6 z portem (`[::1]:8080`) nie jest w pełni obsłużony w parsowaniu authority.
+The HTML report is a separate system kept outside Rust — `src/report.rs` only assembles semantic
+markup and includes CSS via `include_str!`. Restyling never touches scan logic.
+
+```
+design/
+├── direction.md     # product, character, world, moments, signature
+├── foundations.md   # palette, measured contrast, type scale, grid, breakpoints
+├── tokens.css       # the only source of values (colour, spacing, type, motion)
+├── report.css       # report components, semantic tokens only
+├── fonts.css        # Instrument Sans + JetBrains Mono, latin/latin-ext, offline
+├── review.md        # audit: findings, fixes, verification, verdict
+├── closure.md       # consistency with the direction, deliberate omissions
+└── screens/         # 1440 / 720 / 320 shots, empty and partial states
+```
+
+Rules: no gradients, glows or coloured shadows; severity colour is never the only carrier of
+meaning; flat panels (radius 0) with rounding only on markers; a single accent (copper) used only
+where it marks structure. The report and the app UI are in Polish; the CLI stays in English
+(identifiers, flags, logs).
+
+## Known limitations
+
+- No JS rendering — SPAs only expose what is in the source HTML/JS. Wire headless Chrome
+  (`chromiumoxide`) as another stage for full coverage.
+- No intrusive testing: no payloads, parameter fuzzing, auth bypass or uploads. That is left to
+  Burp/ffuf/nuclei — `urls.txt` and `interesting/*` are the input for them.
+- `paths` is a known-path list, not directory brute force.
+- TLS: no certificate chain or JA3 inspection (possible as a `rustls` extension).
+- IPv6 with a port (`[::1]:8080`) is not fully handled in authority parsing.
+- The browser app is local-only, single-scan, and has no history database: runs are directories.
+- A custom signature DSL is planned; today only custom paths are executed.
 
 ## Tips
 
-- `bbhunter subs ... | httpx -silent` — logi idą na stderr, hosty na stdout.
-- Zanim odpalisz `--brute` na dużej domenie, ustaw `--rate 10`, żeby nie zabić resolvera.
-- `--show-secrets` tylko lokalnie; domyślnie raport pokazuje `AKIAIO…MPLE (20 chars)`.
-- Zacznij od `interesting/auth-endpoints.txt` i `api-endpoints.txt`, potem `redirect-params.txt`.
-- Sekret w JS = trop. Sprawdź, czy klucz żyje i jaki ma scope, zanim zgłosisz.
+- `bbhunter subs ... | httpx -silent` — logs go to stderr, hosts to stdout.
+- Before `--brute` on a large domain, set `--rate 10` so you do not hammer the resolver.
+- `--show-secrets` only locally; by default the report shows `AKIAIO…MPLE (20 chars)`.
+- Start with `interesting/auth-endpoints.txt` and `api-endpoints.txt`, then `redirect-params.txt`.
+- A secret in JS is a lead. Check whether the key is live and what its scope is before reporting.
 
-## Licencja / odpowiedzialność
+## License / responsibility
 
-Używaj wyłącznie w ramach programów bug bounty, własnych systemów lub pisemnej zgody.
-Autor nie odpowiada za użycie poza zakresem upoważnienia.
+Use only within bug bounty programs, your own systems, or with written permission. The author is not
+responsible for use outside the authorised scope.
