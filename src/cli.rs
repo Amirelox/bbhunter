@@ -14,6 +14,7 @@ use crate::util::{authority_of, normalize_host, registrable};
     about = "All-in-one bug bounty recon toolkit — for authorized targets only",
     after_help = "Examples:\n  \
         bbhunter recon -d example.com --scope scope.txt --brute --wayback\n  \
+        bbhunter recon -d example.com -d example.org --scope scope.txt\n  \
         bbhunter subs  -d example.com --scope scope.txt\n  \
         bbhunter probe -l subdomains.txt --scope scope.txt\n  \
         bbhunter crawl -l live_hosts.txt --scope scope.txt\n  \
@@ -271,7 +272,7 @@ pub enum Profile {
     Deep,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct ReconArgs {
     #[command(flatten)]
     pub targets: TargetArgs,

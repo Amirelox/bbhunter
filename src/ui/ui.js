@@ -51,6 +51,11 @@
     pendingScope: null,
     filters: { sev: new Set(["high", "medium", "low", "info"]), status: "", q: "" },
     drawerFocus: null,
+    scanQueue: [],
+    scanTotal: 0,
+    scanOpts: null,
+    scanAbort: false,
+    scanFailed: 0,
   };
 
   // ------------------------------------------------------------- helpers
@@ -186,6 +191,28 @@
     try {
       S.runs = await api("/api/runs");
     } catch {}
+  }
+
+  async function startNextScan() {
+    if (S.scanAbort || !S.scanOpts || !S.scanQueue.length) return;
+    const target = S.scanQueue.shift();
+    try {
+      await api("/api/scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...S.scanOpts, target }),
+      });
+      S.job = await api("/api/job");
+      if (routeName() !== "live") location.hash = "#/live";
+      else render();
+      if (S.scanTotal > 1) {
+        toast(`Skan ${S.scanTotal - S.scanQueue.length}/${S.scanTotal}: ${target}`);
+      }
+    } catch (e) {
+      S.scanFailed += 1;
+      toast(`${target}: ${e.message}`, "error");
+      await startNextScan();
+    }
   }
 
   // ------------------------------------------------------------- dashboard
@@ -845,6 +872,8 @@
     const a = t.dataset.action;
     try {
       if (a === "stop") {
+        S.scanAbort = true;
+        S.scanQueue = [];
         await api("/api/scan/stop", { method: "POST" });
         toast("Zatrzymuję po bieżącym etapie");
         S.job = await api("/api/job");
@@ -905,20 +934,18 @@
           $("#q-target").focus();
           return;
         }
-        await api("/api/scan", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            target,
-            scope,
-            brute: $("#q-brute").checked,
-            wayback: $("#q-wayback").checked,
-            osint: $("#q-osint").checked,
-          }),
-        });
-        S.job = await api("/api/job");
-        toast("Skan uruchomiony");
-        location.hash = "#/live";
+        const targets = [...new Set(target.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean))];
+        S.scanQueue = targets;
+        S.scanTotal = targets.length;
+        S.scanFailed = 0;
+        S.scanAbort = false;
+        S.scanOpts = {
+          scope,
+          brute: $("#q-brute").checked,
+          wayback: $("#q-wayback").checked,
+          osint: $("#q-osint").checked,
+        };
+        await startNextScan();
       } else if (form.id === "scope-form") {
         e.preventDefault();
         const name = $("#s-name").value.trim();
@@ -1046,6 +1073,21 @@
         render();
         const label = { done: "Skan zakończony", stopped: "Skan zatrzymany", error: "Skan zakończył się błędem" }[next.status] || "Skan zakończony";
         toast(label, next.status === "error" ? "error" : "");
+        if (S.scanQueue.length) {
+          if (next.status !== "stopped" && !S.scanAbort) {
+            setTimeout(() => startNextScan(), 500);
+          } else {
+            S.scanQueue = [];
+          }
+        } else if (S.scanTotal > 1) {
+          const failed = S.scanFailed;
+          const total = S.scanTotal;
+          S.scanTotal = 0;
+          setTimeout(() => {
+            toast(failed ? `Ukończono ${total} skanów, ${failed} błędów` : `Ukończono ${total} skanów`);
+            location.hash = "#/scans";
+          }, 600);
+        }
       }
     } catch {}
   }

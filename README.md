@@ -44,6 +44,10 @@ bbhunter serve --port 8080        # → http://127.0.0.1:8080
 # full pipeline from the terminal
 bbhunter recon -d example.com --scope scope.txt --brute --wayback -o ./out
 
+# several domains: one report per domain, one shared rate limit
+bbhunter recon -d example.com -d example.org --scope scope.txt
+bbhunter recon -l targets.txt --scope scope.txt
+
 # quick pass (higher rate, shallow crawl)
 bbhunter recon -d example.com --scope scope.txt --profile fast
 
@@ -108,6 +112,10 @@ path-checked again. Findings with the same title and category are grouped in the
 
 ## Output layout
 
+Every registrable domain gets its own directory and report, even when `recon` receives a mixed
+list of domains and subdomains. A run with `-d a.com -d b.org` writes `out/a.com/` and `out/b.org/`
+separately and prints a `cel 1/2` header per target.
+
 ```
 out/<target>/
 ├── report.md / report.html      # human-readable report
@@ -169,6 +177,9 @@ xdg-open http://127.0.0.1:8080
 
 - **The scope is entered per scan** and enforced exactly like the CLI. An empty field means that
   target only.
+- **Several targets in one go**: enter them separated by commas or spaces (`a.com, b.org`). The app
+  runs them sequentially — one scan at a time, each with its own report and run directory — and
+  moves to `Scans` when the queue finishes.
 - **One scan at a time.** A second request gets `409` so two runs cannot mix logs.
 - The server binds to `127.0.0.1` only and has no auth — it is a local tool, not a network service.
 - The UI is embedded in the binary (`src/ui/` via `include_str!`), so there is no frontend build.

@@ -467,19 +467,53 @@ async fn cmd_recon(
     show_secrets: bool,
     args: ReconArgs,
 ) -> Result<()> {
-    let cancel = std::sync::atomic::AtomicBool::new(false);
-    pipeline::recon(
-        http,
-        resolver,
-        scope,
-        out,
-        concurrency,
-        show_secrets,
-        args,
-        &cancel,
-        &[],
-    )
-    .await?;
+    // One report per registrable domain, even when the user passes several
+    // domains or a mixed host list.
+    let inputs = args.targets.hosts(scope)?;
+    let mut groups: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for host in inputs {
+        let bare = util::normalize_host(&host).unwrap_or_else(|| host.clone());
+        let root = util::registrable(&bare);
+        groups.entry(root).or_default().push(host);
+    }
+
+    let total = groups.len();
+    let mut failures = 0usize;
+    for (index, (root, hosts)) in groups.into_iter().enumerate() {
+        if total > 1 {
+            log::stage(&format!("cel {}/{}: {root}", index + 1, total));
+        }
+        let group_args = ReconArgs {
+            targets: TargetArgs {
+                domains: Vec::new(),
+                list: None,
+                urls: hosts,
+            },
+            ..args.clone()
+        };
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        if let Err(e) = pipeline::recon(
+            http,
+            resolver,
+            scope,
+            out,
+            concurrency,
+            show_secrets,
+            group_args,
+            &cancel,
+            &[],
+        )
+        .await
+        {
+            log::err(&format!("{root}: {e:#}"));
+            failures += 1;
+        }
+    }
+
+    if failures > 0 {
+        anyhow::bail!("{failures} z {total} celów zakończyło się błędem");
+    }
     Ok(())
 }
 
