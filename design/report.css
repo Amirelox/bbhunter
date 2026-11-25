@@ -512,6 +512,10 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.status[data-class="0"] {
+  color: var(--color-text-muted);
+}
+
 .status[data-class="2"] {
   color: var(--color-text);
 }
@@ -944,4 +948,51 @@ h2 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* --- OSINT w raporcie ---------------------------------------------------- */
+.alias-note {
+  display: block;
+  margin-block-start: 2px;
+  font-size: var(--size-12);
+  color: var(--color-text-muted);
+}
+
+.osint-sub {
+  margin-block-start: var(--space-5);
+}
+
+.osint-sub h3 {
+  margin-block-end: var(--space-2);
+  font-size: var(--size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--size-13);
+}
+
+.kv dt {
+  font-family: var(--font-mono);
+  font-size: var(--size-12);
+  color: var(--color-text-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--size-12);
+  color: var(--color-text-muted);
+}
+
+.tag--in {
+  color: var(--color-accent);
 }

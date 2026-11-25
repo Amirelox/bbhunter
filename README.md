@@ -84,6 +84,12 @@ round: probe → crawl → paths, and its own findings feed the following round.
 to pass the allowlist, while `--max-hosts` and `--depth` keep the scan bounded. Disable with
 `--no-recurse` (the UI exposes the same switch).
 
+**Aliases and duplicates.** Hosts that end up on the same final URL with the same title are one
+asset: the first becomes primary, the rest are reported as aliases and are not crawled or
+path-checked again. Findings with the same title and category are grouped in the report
+(“Brak CSP — 23 hosty”), so the ledger shows signal instead of repetition. Hosts that answer on
+21/25/143 but not on HTTP are counted as non-HTTP services, not as “no response”.
+
 ## Output layout
 
 ```
@@ -163,9 +169,17 @@ bbhunter osint -d example.com --scope scope.txt -l live_hosts.txt
 # artefacts: bbhunter-out/example.com/osint/{osint.md,osint.json,subdomains.txt,cloud.txt,dorks.txt,favicons.txt}
 ```
 
-OSINT is also a scan stage, **enabled by default** in every `recon` and in the UI. New subdomains
-join the first scan round, artefacts land in `bbhunter-out/example.com/osint/`, and the report gains
-an “OSINT” block in the sidebar. Disable with `--no-osint` or by unchecking the box in the UI.
+OSINT is also a scan stage, **enabled by default** in every `recon` and in the UI. It runs in two
+phases:
+
+- **pre-scan** — extra passive sources, RDAP, cloud candidates and dorks; new subdomains join the
+  first scan round;
+- **post-probe** — ASN/prefixes and Shodan InternetDB for every live host, favicon clusters for all
+  of them (including `<link rel="icon">`), reverse-IP and certificate SANs for related hosts.
+
+Artefacts land in `bbhunter-out/example.com/osint/`; the report gains a full **OSINT** section
+(RDAP, ASN, clouds, favicons, related hosts, dorks) and a summary block in the sidebar. Disable
+with `--no-osint` or by unchecking the box in the UI.
 
 | Area | Source | Key |
 |---|---|---|
@@ -182,11 +196,17 @@ an “OSINT” block in the sidebar. Disable with `--no-osint` or by unchecking 
 | Cloud | S3 / GCS / Azure Blob over name permutations | no |
 
 **Bucket names are candidates, not confirmed assets.** `403` means “the name exists”, `200` means a
-public listing; those buckets may belong to someone else. The tool only reads headers, never object
-contents, and does not claim ownership.
+public listing; those buckets may belong to someone else. For `200` the tool also reports whether
+the target domain appears in the first 200 KB of the listing, which is a weak ownership hint, not
+proof. It never claims ownership.
 
 A missing key never aborts a run — that source is skipped and the reason is written to “Notes”.
 Dorks are generated as links (no Google scraping), so they do not break ToS.
+
+Passive sources are cached for 24 hours in `~/.cache/bbhunter` (override with `BBHUNTER_CACHE`),
+retried twice with backoff, and fall back where possible: crt.sh → certspotter → RapidDNS,
+Wayback split into year ranges, Common Crawl with a previous-index retry. Re-running a scan is
+therefore much faster and gentler on the APIs.
 
 ## Product site
 
@@ -231,6 +251,7 @@ src/
 ├── paths.rs     # well-known and custom paths with response validation
 ├── osint.rs     # RDAP, ASN, archives, cloud names, favicons, dorks
 ├── triage.rs    # URL/host classification into buckets
+├── cache.rs     # 24 h response cache for passive sources
 ├── wayback.rs   # CDX
 ├── findings.rs  # Finding model, dedupe, sort, stages
 ├── report.rs    # Markdown/HTML/JSON/JSONL
@@ -285,6 +306,8 @@ where it marks structure. The report and the app UI are in Polish; the CLI stays
 - IPv6 with a port (`[::1]:8080`) is not fully handled in authority parsing.
 - The browser app is local-only, single-scan, and has no history database: runs are directories.
 - A custom signature DSL is planned; today only custom paths are executed.
+- Reverse-IP and CT lookups are capped (3 IPs / 3 hosts) to keep a scan bounded; raise the caps in
+  `osint.rs` if you need deeper graph work.
 
 ## Tips
 
@@ -293,6 +316,7 @@ where it marks structure. The report and the app UI are in Polish; the CLI stays
 - `--show-secrets` only locally; by default the report shows `AKIAIO…MPLE (20 chars)`.
 - Start with `interesting/auth-endpoints.txt` and `api-endpoints.txt`, then `redirect-params.txt`.
 - A secret in JS is a lead. Check whether the key is live and what its scope is before reporting.
+- The cache makes repeat scans cheap: delete `~/.cache/bbhunter` to force fresh passive data.
 
 ## License / responsibility
 

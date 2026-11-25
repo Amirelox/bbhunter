@@ -1,8 +1,10 @@
 use colored::Colorize;
+use futures::future::join_all;
 use futures::stream::{self, StreamExt};
 use reqwest::header::{HeaderName, HeaderValue};
 use scraper::{Html, Selector};
 use serde::Serialize;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::LazyLock;
 
 use crate::dnsx::Resolver;
@@ -33,12 +35,37 @@ pub struct HostResult {
     pub content_type: String,
     pub body_len: usize,
     pub elapsed_ms: u128,
+    /// (final_url + title) hash; equal values mean alias hosts.
+    pub fingerprint: u64,
+    pub alias_of: Option<String>,
+    /// Open non-HTTP services for hosts that do not answer on 80/443.
+    pub services: Vec<String>,
 }
 
 #[derive(Default)]
 pub struct ProbeOutcome {
     pub hosts: Vec<HostResult>,
     pub findings: Findings,
+}
+
+fn fingerprint(final_url: &str, title: &str) -> u64 {
+    let mut h = DefaultHasher::new();
+    final_url.hash(&mut h);
+    title.hash(&mut h);
+    h.finish()
+}
+
+async fn open_services(host: &str) -> Vec<String> {
+    let probes = [(21u16, "ftp"), (25, "smtp"), (143, "imap")];
+    let results = join_all(probes.iter().map(|(port, name)| async move {
+        let connect = tokio::net::TcpStream::connect((host, *port));
+        match tokio::time::timeout(std::time::Duration::from_millis(1500), connect).await {
+            Ok(Ok(_)) => Some((*name).to_string()),
+            _ => None,
+        }
+    }))
+    .await;
+    results.into_iter().flatten().collect()
 }
 
 fn title_of(f: &Fetched) -> String {
@@ -81,8 +108,41 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
     }
 
     let Some((url, f)) = fetched else {
-        log::info(&format!("{host}: no HTTP response ({last_err})"));
-        return None;
+        let services = open_services(&dns_host).await;
+        if services.is_empty() {
+            log::info(&format!("{host}: no HTTP response ({last_err})"));
+            return None;
+        }
+        log::plus(&format!("{} non-HTTP ({})", host, services.join(", ")));
+        let mut findings = Findings::with_stage(Stage::Probe);
+        findings.add(
+            Severity::Info,
+            "services",
+            &dns_host,
+            &format!("tcp://{host}"),
+            format!("Host bez HTTP, otwarte usługi: {}", services.join(", ")),
+            "Sprawdź usługi bezpośrednio (ftp/smtp/imap), poza pipeline HTTP.",
+        );
+        return Some((
+            HostResult {
+                host: host.to_string(),
+                ips: dns.ips,
+                cname: dns.cname,
+                url: format!("tcp://{host}"),
+                status: 0,
+                final_url: format!("tcp://{host}"),
+                title: String::new(),
+                server: String::new(),
+                tech: services.clone(),
+                content_type: String::new(),
+                body_len: 0,
+                elapsed_ms: 0,
+                fingerprint: fingerprint(&format!("tcp://{host}"), ""),
+                alias_of: None,
+                services,
+            },
+            findings,
+        ));
     };
 
     let mut findings = Findings::with_stage(Stage::Probe);
@@ -123,12 +183,15 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
             url,
             status,
             final_url: f.final_url.clone(),
-            title,
+            title: title.clone(),
             server: tech::server_of(&f.headers),
             tech,
             content_type: f.content_type().to_string(),
             body_len: f.body_len,
             elapsed_ms: f.elapsed_ms,
+            fingerprint: fingerprint(&f.final_url, &title),
+            alias_of: None,
+            services: Vec::new(),
         },
         findings,
     ))

@@ -136,13 +136,36 @@ impl Http {
         })
     }
 
-    pub async fn get(&self, url: &str) -> Result<Fetched> {
-        self.fetch(url, &[], 1_500_000).await
-    }
-
     /// HEAD request: existence checks without downloading a body.
     pub async fn head(&self, url: &str) -> Result<Fetched> {
         self.request(reqwest::Method::HEAD, url, &[], 0).await
+    }
+
+    /// GET with retries and backoff, for flaky public APIs.
+    pub async fn body_retry(&self, url: &str, max_body: usize, attempts: usize) -> Result<String> {
+        let mut last: Option<anyhow::Error> = None;
+        for attempt in 0..attempts.max(1) {
+            match self.fetch(url, &[], max_body).await {
+                Ok(f) if f.status < 500 && f.status != 429 => return Ok(f.body),
+                Ok(f) => last = Some(anyhow::anyhow!("HTTP {}", f.status)),
+                Err(e) => last = Some(e),
+            }
+            if attempt + 1 < attempts {
+                let delay = 300 * (1u64 << attempt) + fastrand::u64(..250);
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            }
+        }
+        Err(last.unwrap_or_else(|| anyhow::anyhow!("request failed")))
+    }
+
+    /// Cached + retried body, the default for third-party sources.
+    pub async fn source_body(&self, url: &str, max_body: usize) -> Result<String> {
+        if let Some(body) = crate::cache::get(url) {
+            return Ok(body);
+        }
+        let body = self.body_retry(url, max_body, 2).await?;
+        crate::cache::put(url, &body);
+        Ok(body)
     }
 
     pub async fn fetch(

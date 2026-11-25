@@ -80,41 +80,33 @@ pub async fn recon(
             .as_str(),
     );
 
-    // 0. Optional OSINT stage: passive DNS beyond the built-in sources,
-    //    RDAP/ASN, archives, cloud names, dorks and favicon hashes.
-    let mut osint_summary: Option<osint::Summary> = None;
+    // 0. OSINT pre-scan: extra passive sources, RDAP, cloud names, dorks.
+    //    ASN/favicons run after the probe, when every live host is known.
+    let mut osint_reports: Vec<(String, osint::OsintReport)> = Vec::new();
     let mut known: BTreeSet<String> = BTreeSet::new();
     let mut cancelled = false;
+    let osint_opts = osint::Options {
+        cloud: true,
+        dorks: true,
+        favicon: true,
+        favicon_hosts: 80,
+        skip_passive: true,
+    };
     if cancel.load(Ordering::Relaxed) {
         cancelled = true;
     }
     if !args.no_osint && !cancelled {
-        log::stage("OSINT (extra passive sources, RDAP, ASN, cloud, dorks)");
-        let opts = osint::Options {
-            cloud: true,
-            dorks: true,
-            favicon: !inputs.is_empty(),
-            favicon_hosts: 20,
-            skip_passive: true,
-        };
+        log::stage("OSINT pre-scan (extra passive sources, RDAP, cloud, dorks)");
         for root in &roots {
-            match osint::run(http, resolver, scope, root, &inputs, &opts).await {
+            match osint::pre(http, resolver, scope, root, &inputs, &osint_opts).await {
                 Ok(rep) => {
                     known.extend(rep.subdomains.iter().cloned());
-                    let dir = if roots.len() == 1 {
-                        out.join(&target_name).join("osint")
-                    } else {
-                        out.join(&target_name).join("osint").join(util::slug(root))
-                    };
-                    if let Err(e) = osint::write_artifacts(&dir, &rep) {
-                        log::warn(&format!("osint artifacts: {e:#}"));
-                    }
-                    osint_summary = Some(rep.summary());
+                    let summary = rep.summary();
                     log::ok(&format!(
                         "OSINT: {} subdomen, {} kandydatów chmury",
-                        rep.summary().subdomains,
-                        rep.summary().cloud
+                        summary.subdomains, summary.cloud
                     ));
+                    osint_reports.push((root.clone(), rep));
                 }
                 Err(e) => log::warn(&format!("OSINT failed for {root}: {e:#}")),
             }
@@ -171,6 +163,7 @@ pub async fn recon(
     let mut hosts: Vec<HostResult> = Vec::new();
 
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut alias_primaries: BTreeMap<u64, String> = BTreeMap::new();
     let mut frontier: Vec<String> = known.iter().cloned().collect();
     let recursive = !args.no_recurse;
     let max_hosts = args.max_hosts.max(1);
@@ -217,18 +210,39 @@ pub async fn recon(
             triage.add_host(&h.host);
         }
 
+        // Alias detection: hosts that end up on the same final URL with the same
+        // title are one asset. Keep the first as primary and mark the rest.
+        for h in outcome.hosts.iter_mut() {
+            if h.status == 0 {
+                continue;
+            }
+            match alias_primaries.entry(h.fingerprint) {
+                std::collections::btree_map::Entry::Vacant(v) => {
+                    v.insert(h.host.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(o) => {
+                    h.alias_of = Some(o.get().clone());
+                }
+            }
+        }
+
         let bases: BTreeMap<String, String> = outcome
             .hosts
             .iter()
             .map(|h| (h.host.clone(), h.url.clone()))
             .collect();
-        let live: Vec<String> = outcome.hosts.iter().map(|h| h.host.clone()).collect();
+        let live: Vec<String> = outcome
+            .hosts
+            .iter()
+            .filter(|h| h.status > 0 && h.alias_of.is_none())
+            .map(|h| h.host.clone())
+            .collect();
 
         // 4. Crawl the most interesting live hosts of this batch.
         let crawlable: Vec<String> = outcome
             .hosts
             .iter()
-            .filter(|h| h.status < 400)
+            .filter(|h| (200..400).contains(&h.status) && h.alias_of.is_none())
             .map(|h| h.host.clone())
             .collect();
         let crawl_targets: Vec<String> = triage
@@ -336,7 +350,45 @@ pub async fn recon(
     findings.sort();
     hosts.sort_by(|a, b| a.host.cmp(&b.host));
 
-    // 8. Report
+    // 8. OSINT enrichment over every live host: ASN, InternetDB, favicons,
+    //    reverse IP and certificate SANs. Then persist the artefacts.
+    let live_primaries: Vec<String> = hosts
+        .iter()
+        .filter(|h| h.status > 0 && h.alias_of.is_none())
+        .map(|h| h.host.clone())
+        .collect();
+    let mut osint_final: Option<osint::OsintReport> = None;
+    for (root, mut rep) in osint_reports {
+        if let Err(e) = osint::enrich(
+            http,
+            resolver,
+            scope,
+            &mut rep,
+            &live_primaries,
+            &osint_opts,
+        )
+        .await
+        {
+            log::warn(&format!("OSINT enrich failed for {root}: {e:#}"));
+        }
+        let dir = if roots.len() == 1 {
+            out.join(&target_name).join("osint")
+        } else {
+            out.join(&target_name).join("osint").join(util::slug(&root))
+        };
+        if let Err(e) = osint::write_artifacts(&dir, &rep) {
+            log::warn(&format!("osint artifacts: {e:#}"));
+        }
+        log::ok(&format!(
+            "OSINT: {} hostów z ASN, {} favicon, {} powiązanych",
+            rep.host_asn.len(),
+            rep.favicons.len(),
+            rep.related.len()
+        ));
+        osint_final = Some(rep);
+    }
+
+    // 9. Report
     let mut notes: Vec<String> = Vec::new();
     if !scope.is_enforced() {
         notes.push(
@@ -405,7 +457,7 @@ pub async fn recon(
         triage: &triage,
         wayback: &wayback_urls,
         notes: &notes,
-        osint: osint_summary.as_ref(),
+        osint: osint_final.as_ref(),
     };
     report::write_all(&dir, &data)?;
 

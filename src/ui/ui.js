@@ -544,13 +544,17 @@
         : "";
       const cloud = (d.cloud || []).length
         ? `<section class="panel"><div class="panel__head"><h2>Kandydaci chmury</h2><span class="meta">własność niepotwierdzona</span></div>
-            <div class="table-wrap"><table class="table"><thead><tr><th>Dostawca</th><th>Nazwa</th><th>Status</th><th>Typ</th></tr></thead><tbody>
-            ${d.cloud.map((h) => `<tr><td>${esc(h.provider)}</td><td class="mono-cell">${esc(h.name)}</td><td class="num">${h.status}</td><td>${esc(h.kind)}</td></tr>`).join("")}
+            <div class="table-wrap"><table class="table"><thead><tr><th>Dostawca</th><th>Nazwa</th><th>Status</th><th>Typ</th><th>Domena</th></tr></thead><tbody>
+            ${d.cloud.map((h) => `<tr><td>${esc(h.provider)}</td><td class="mono-cell">${esc(h.name)}</td><td class="num">${h.status}</td><td>${esc(h.kind)}</td><td>${h.mentions_domain ? "tak" : "—"}</td></tr>`).join("")}
             </tbody></table></div></section>`
         : "";
       const fav = (d.favicons || []).length
         ? `<section class="panel"><div class="panel__head"><h2>Favicony</h2></div>
             <ul class="list">${d.favicons.map((g) => `<li class="list__row"><span class="mono-cell">${esc(g.hash)}</span><span class="list__meta">${esc((g.hosts || []).join(", "))}</span></li>`).join("")}</ul></section>`
+        : "";
+      const related = (d.related || []).length
+        ? `<section class="panel"><div class="panel__head"><h2>Powiązane hosty</h2><span class="meta">reverse IP + SAN</span></div>
+            <ul class="list">${d.related.map((r) => `<li class="list__row"><span class="mono-cell">${esc(r.name)}</span><span class="list__meta">${esc(r.source)}${r.in_scope ? " · w zakresie" : ""}</span></li>`).join("")}</ul></section>`
         : "";
       const dorks = (d.dorks || []).length
         ? `<section class="panel"><div class="panel__head"><h2>Dorki</h2></div>
@@ -563,7 +567,7 @@
       const notes = (d.notes || []).length
         ? `<section class="panel"><div class="panel__head"><h2>Uwagi</h2></div><ul class="list">${d.notes.map((n) => `<li class="list__row"><span>${esc(n)}</span></li>`).join("")}</ul></section>`
         : "";
-      slot.innerHTML = [rdap, asn, cloud, fav, dorks, code, notes].filter(Boolean).join("") || empty("Pusto", "Ten przebieg nie ma danych OSINT.");
+      slot.innerHTML = [rdap, asn, cloud, related, fav, dorks, code, notes].filter(Boolean).join("") || empty("Pusto", "Ten przebieg nie ma danych OSINT.");
     } catch {
       slot.innerHTML = empty("Brak OSINT", "Ten przebieg nie zawiera danych OSINT.");
     }

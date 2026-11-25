@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::dnsx::Resolver;
 use crate::http::Http;
@@ -13,6 +14,12 @@ use crate::subs;
 use crate::util;
 
 const MAX_FAVICON: usize = 120_000;
+
+static ICON_TAG_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r#"(?is)<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]*>"#).unwrap()
+});
+static HREF_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r#"(?is)href=["']([^"']+)["']"#).unwrap());
 const MAX_CLOUD_NAMES: usize = 15;
 
 #[derive(Default, Serialize)]
@@ -23,8 +30,10 @@ pub struct OsintReport {
     pub rdap: Option<Rdap>,
     pub asn: Vec<AsnInfo>,
     pub shodan: Vec<ShodanHost>,
+    pub host_asn: Vec<HostAsn>,
     pub prefixes: Vec<String>,
     pub cloud: Vec<CloudHit>,
+    pub related: Vec<Related>,
     pub code_hits: Vec<CodeHit>,
     pub favicons: Vec<FaviconGroup>,
     pub dorks: Vec<Dork>,
@@ -64,6 +73,24 @@ pub struct CloudHit {
     pub url: String,
     pub status: u16,
     pub kind: &'static str,
+    pub mentions_domain: bool,
+}
+
+#[derive(Serialize)]
+pub struct HostAsn {
+    pub host: String,
+    pub ip: String,
+    pub asn: u32,
+    pub holder: String,
+    pub prefix: String,
+}
+
+#[derive(Serialize)]
+pub struct Related {
+    pub name: String,
+    pub source: &'static str,
+    pub in_scope: bool,
+    pub note: String,
 }
 
 #[derive(Serialize)]
@@ -123,55 +150,54 @@ impl OsintReport {
 // --------------------------------------------------------------- źródła
 
 async fn common_crawl(http: &Http, domain: &str) -> (Vec<String>, Option<String>) {
-    let Ok(f) = http
-        .fetch("https://index.commoncrawl.org/collinfo.json", &[], 200_000)
+    let body = match http
+        .source_body("https://index.commoncrawl.org/collinfo.json", 400_000)
         .await
-    else {
-        return (
-            Vec::new(),
-            Some("Common Crawl: indeks niedostępny".to_string()),
-        );
+    {
+        Ok(b) => b,
+        Err(_) => return (Vec::new(), Some("Common Crawl: indeks niedostępny".to_string())),
     };
-    let Ok(v) = serde_json::from_str::<Value>(&f.body) else {
-        return (
-            Vec::new(),
-            Some("Common Crawl: niepoprawny collinfo".to_string()),
-        );
+    let Ok(v) = serde_json::from_str::<Value>(&body) else {
+        return (Vec::new(), Some("Common Crawl: niepoprawny collinfo".to_string()));
     };
-    // collinfo is ordered newest first.
-    let Some(id) = v
+    let ids: Vec<String> = v
         .as_array()
-        .and_then(|a| a.first())
-        .and_then(|x| x.get("id"))
-        .and_then(|x| x.as_str())
-    else {
-        return (
-            Vec::new(),
-            Some("Common Crawl: brak identyfikatora indeksu".to_string()),
-        );
-    };
-    let url = format!(
-        "https://index.commoncrawl.org/{id}-index?url=*.{domain}&output=json&fl=url&collapse=urlkey&limit=3000"
-    );
-    let Ok(f) = http.fetch(&url, &[], 6_000_000).await else {
-        return (
-            Vec::new(),
-            Some("Common Crawl: zapytanie nie powiodło się".to_string()),
-        );
-    };
-    if f.status != 200 {
-        return (Vec::new(), Some(format!("Common Crawl: HTTP {}", f.status)));
+        .map(|rows| {
+            rows.iter()
+                .take(2)
+                .filter_map(|x| x.get("id").and_then(|i| i.as_str()).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if ids.is_empty() {
+        return (Vec::new(), Some("Common Crawl: brak identyfikatora indeksu".to_string()));
     }
-    let mut out = BTreeSet::new();
-    for line in f.body.lines() {
-        let Ok(row) = serde_json::from_str::<Value>(line) else {
-            continue;
-        };
-        if let Some(u) = row.get("url").and_then(|v| v.as_str()) {
-            out.insert(u.to_string());
+
+    let mut last_note = None;
+    for id in ids {
+        let url = format!(
+            "https://index.commoncrawl.org/{id}-index?url=*.{domain}&output=json&fl=url&collapse=urlkey&limit=3000"
+        );
+        match http.source_body(&url, 6_000_000).await {
+            Ok(body) if body.trim().starts_with('{') => {
+                let mut out = BTreeSet::new();
+                for line in body.lines() {
+                    if let Ok(row) = serde_json::from_str::<Value>(line) {
+                        if let Some(u) = row.get("url").and_then(|v| v.as_str()) {
+                            out.insert(u.to_string());
+                        }
+                    }
+                }
+                if !out.is_empty() {
+                    return (out.into_iter().collect(), None);
+                }
+            }
+            Ok(_) => last_note = Some(format!("Common Crawl: pusty indeks {id}")),
+            Err(e) => last_note = Some(format!("Common Crawl {id}: {e:#}")),
         }
     }
-    (out.into_iter().collect(), None)
+
+    (Vec::new(), last_note)
 }
 
 async fn security_trails(http: &Http, domain: &str) -> (Vec<String>, Option<String>) {
@@ -490,25 +516,43 @@ fn cloud_candidates(domain: &str) -> Vec<String> {
     names
 }
 
-async fn cloud_check(http: &Http, name: &str) -> Vec<CloudHit> {
+async fn listing_mentions(http: &Http, url: &str, apex: &str) -> bool {
+    if apex.is_empty() {
+        return false;
+    }
+    match http.fetch(url, &[], 200_000).await {
+        Ok(f) if f.status == 200 => f
+            .body
+            .to_ascii_lowercase()
+            .contains(&apex.to_ascii_lowercase()),
+        _ => false,
+    }
+}
+
+async fn cloud_check(http: &Http, name: &str, apex: &str) -> Vec<CloudHit> {
     let mut hits = Vec::new();
 
     let s3 = format!("https://{name}.s3.amazonaws.com/");
     if let Ok(f) = http.head(&s3).await {
         match f.status {
-            200 => hits.push(CloudHit {
-                provider: "S3",
-                name: name.to_string(),
-                url: s3.clone(),
-                status: 200,
-                kind: "publiczna lista",
-            }),
+            200 => {
+                let mentions = listing_mentions(http, &s3, apex).await;
+                hits.push(CloudHit {
+                    provider: "S3",
+                    name: name.to_string(),
+                    url: s3.clone(),
+                    status: 200,
+                    kind: "publiczna lista",
+                    mentions_domain: mentions,
+                })
+            }
             403 => hits.push(CloudHit {
                 provider: "S3",
                 name: name.to_string(),
                 url: s3.clone(),
                 status: 403,
-                kind: "istnieje, prywatny",
+                kind: "nazwa zajęta (właściciel niepotwierdzony)",
+                mentions_domain: false,
             }),
             _ => {}
         }
@@ -517,19 +561,24 @@ async fn cloud_check(http: &Http, name: &str) -> Vec<CloudHit> {
     let gcs = format!("https://storage.googleapis.com/{name}");
     if let Ok(f) = http.head(&gcs).await {
         match f.status {
-            200 => hits.push(CloudHit {
-                provider: "GCS",
-                name: name.to_string(),
-                url: gcs.clone(),
-                status: 200,
-                kind: "publiczna lista",
-            }),
+            200 => {
+                let mentions = listing_mentions(http, &gcs, apex).await;
+                hits.push(CloudHit {
+                    provider: "GCS",
+                    name: name.to_string(),
+                    url: gcs.clone(),
+                    status: 200,
+                    kind: "publiczna lista",
+                    mentions_domain: mentions,
+                })
+            }
             403 => hits.push(CloudHit {
                 provider: "GCS",
                 name: name.to_string(),
                 url: gcs.clone(),
                 status: 403,
-                kind: "istnieje, prywatny",
+                kind: "nazwa zajęta (właściciel niepotwierdzony)",
+                mentions_domain: false,
             }),
             _ => {}
         }
@@ -543,7 +592,8 @@ async fn cloud_check(http: &Http, name: &str) -> Vec<CloudHit> {
                 name: name.to_string(),
                 url: azure.clone(),
                 status: f.status,
-                kind: "istnieje, prywatny",
+                kind: "nazwa zajęta (właściciel niepotwierdzony)",
+                mentions_domain: false,
             });
         }
     }
@@ -600,6 +650,59 @@ async fn grep_app(http: &Http, domain: &str) -> (Vec<CodeHit>, Option<String>) {
                 repo: repo.to_string(),
                 path: path.to_string(),
                 url: format!("https://grep.app/search?q={}", encoded(&query)),
+            });
+        }
+    }
+    (out, None)
+}
+
+async fn searchcode(http: &Http, domain: &str) -> (Vec<CodeHit>, Option<String>) {
+    let query = format!("\"{domain}\"");
+    let url = format!(
+        "https://searchcode.com/api/codesearch_I/?q={}&per_page=10",
+        encoded(&query)
+    );
+    let body = match http.source_body(&url, 2_000_000).await {
+        Ok(b) => b,
+        Err(_) => return (Vec::new(), Some("searchcode: request failed".to_string())),
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&body) else {
+        return (Vec::new(), Some("searchcode: bad JSON".to_string()));
+    };
+    let mut out = Vec::new();
+    if let Some(rows) = v.get("results").and_then(|r| r.as_array()) {
+        for row in rows.iter().take(10) {
+            let repo = row
+                .get("repo")
+                .and_then(|r| r.as_str())
+                .unwrap_or("")
+                .to_string();
+            let path = row
+                .get("filename")
+                .or_else(|| row.get("name"))
+                .and_then(|r| r.as_str())
+                .unwrap_or("")
+                .to_string();
+            let link = row
+                .get("url")
+                .and_then(|r| r.as_str())
+                .unwrap_or("")
+                .to_string();
+            if repo.is_empty() && path.is_empty() {
+                continue;
+            }
+            let full = if link.starts_with("http") {
+                link
+            } else if link.starts_with('/') {
+                format!("https://searchcode.com{link}")
+            } else {
+                format!("https://searchcode.com/?q={}", encoded(&query))
+            };
+            out.push(CodeHit {
+                source: "searchcode",
+                repo,
+                path,
+                url: full,
             });
         }
     }
@@ -752,7 +855,7 @@ async fn fetch_favicon(http: &Http, target: &str) -> Option<i64> {
             format!("http://{}", target.trim_end_matches('/')),
         ]
     };
-    for base in bases {
+    for base in &bases {
         let Ok(f) = http
             .fetch(&format!("{base}/favicon.ico"), &[], MAX_FAVICON)
             .await
@@ -761,6 +864,38 @@ async fn fetch_favicon(http: &Http, target: &str) -> Option<i64> {
         };
         if f.status < 400 && !f.bytes.is_empty() {
             return Some(favicon_hash(&f.bytes));
+        }
+    }
+
+    // Fallback: <link rel="icon"> from the homepage.
+    for base in &bases {
+        let Ok(page) = http.fetch(base, &[], 800_000).await else {
+            continue;
+        };
+        if page.status >= 400 || !page.is_html() {
+            continue;
+        }
+        let Some(tag) = ICON_TAG_RE.find(&page.body) else {
+            continue;
+        };
+        let Some(href) = HREF_RE
+            .captures(tag.as_str())
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().to_string())
+        else {
+            continue;
+        };
+        let Ok(base_url) = url::Url::parse(base) else {
+            continue;
+        };
+        let Ok(icon_url) = base_url.join(&href) else {
+            continue;
+        };
+        let Ok(icon) = http.fetch(icon_url.as_str(), &[], MAX_FAVICON).await else {
+            continue;
+        };
+        if icon.status < 400 && !icon.bytes.is_empty() {
+            return Some(favicon_hash(&icon.bytes));
         }
     }
     None
@@ -875,7 +1010,7 @@ fn dorks(domain: &str) -> Vec<Dork> {
 
 // --------------------------------------------------------------- orkiestracja
 
-pub async fn run(
+pub async fn pre(
     http: &Http,
     resolver: &Resolver,
     scope: &Scope,
@@ -888,7 +1023,6 @@ pub async fn run(
         ..OsintReport::default()
     };
     let mut subs_all: BTreeSet<String> = BTreeSet::new();
-
     let domain_like = !util::is_ip(domain) && domain != "localhost";
 
     if !opts.skip_passive {
@@ -919,7 +1053,7 @@ pub async fn run(
     }
     log::info(&format!("Common Crawl: {} URL-i", cc.len()));
 
-    log::info("SecurityTrails / VirusTotal (jeśli klucze są w env)");
+    log::info("SecurityTrails / VirusTotal / Shodan DNS (jeśli klucze są w env)");
     let (st, st_note) = if domain_like {
         security_trails(http, domain).await
     } else {
@@ -994,42 +1128,19 @@ pub async fn run(
             ));
             report.rdap = Some(r);
         }
-        None => report.notes.push("RDAP: brak odpowiedzi".to_string()),
-    }
-
-    log::stage("ASN, prefiksy, Shodan InternetDB");
-    let mut ips: BTreeSet<String> = BTreeSet::new();
-    for host in std::iter::once(domain.to_string()).chain(hosts.iter().take(5).cloned()) {
-        let bare = util::normalize_host(&host).unwrap_or(host);
-        for ip in resolver.resolve(&bare).await.ips {
-            ips.insert(ip);
-        }
-    }
-    for ip in ips.iter().take(4) {
-        if let Some(info) = asn_lookup(http, ip).await {
-            for prefix in &info.prefixes {
-                if !report.prefixes.contains(prefix) {
-                    report.prefixes.push(prefix.clone());
-                }
+        None => {
+            if domain_like {
+                report.notes.push("RDAP: brak odpowiedzi".to_string());
             }
-            report.asn.push(info);
-        }
-        if let Some(host) = internetdb(http, ip).await {
-            report.shodan.push(host);
         }
     }
-    log::ok(&format!(
-        "{} IP, {} ASN, {} prefiksów",
-        ips.len(),
-        report.asn.len(),
-        report.prefixes.len()
-    ));
 
     if opts.cloud && domain_like {
         log::stage("Kandydaci nazw w chmurze (S3 / GCS / Azure)");
         let names = cloud_candidates(domain);
+        let apex = util::registrable(domain);
         for name in &names {
-            let hits = cloud_check(http, name).await;
+            let hits = cloud_check(http, name, &apex).await;
             for hit in hits {
                 log::ok(&format!("{}: {} ({})", hit.provider, hit.name, hit.kind));
                 report.cloud.push(hit);
@@ -1053,6 +1164,11 @@ pub async fn run(
             report.notes.push(note);
         }
         report.code_hits.extend(grep_hits);
+        let (sc_hits, sc_note) = searchcode(http, domain).await;
+        if let Some(note) = sc_note {
+            report.notes.push(note);
+        }
+        report.code_hits.extend(sc_hits);
         let (gh_hits, gh_note) = github_search(http, domain).await;
         if let Some(note) = gh_note {
             report.notes.push(note);
@@ -1065,8 +1181,82 @@ pub async fn run(
         ));
     }
 
+    Ok(report)
+}
+
+/// Post-probe enrichment: ASN/InternetDB for every live host, favicon clusters,
+/// reverse-IP and certificate SANs for related infrastructure.
+fn is_private_ip(ip: &str) -> bool {
+    let ip = ip.trim();
+    ip.starts_with("10.")
+        || ip.starts_with("127.")
+        || ip.starts_with("192.168.")
+        || ip.starts_with("169.254.")
+        || ip == "::1"
+        || ip.starts_with("fc")
+        || ip.starts_with("fd")
+        || ip.split('.').next() == Some("172")
+}
+
+pub async fn enrich(
+    http: &Http,
+    resolver: &Resolver,
+    scope: &Scope,
+    report: &mut OsintReport,
+    hosts: &[String],
+    opts: &Options,
+) -> Result<()> {
+    log::stage("ASN, prefiksy, Shodan InternetDB (wszystkie hosty)");
+
+    let mut ips: BTreeSet<String> = BTreeSet::new();
+    let mut host_ips: Vec<(String, String)> = Vec::new();
+    for host in hosts.iter().take(80) {
+        let bare = util::normalize_host(host).unwrap_or_else(|| host.clone());
+        let resolved = resolver.resolve(&bare).await;
+        if let Some(ip) = resolved.ips.first() {
+            ips.insert(ip.clone());
+            host_ips.push((host.clone(), ip.clone()));
+        }
+    }
+
+    for ip in ips.iter().take(40) {
+        if let Some(info) = asn_lookup(http, ip).await {
+            for prefix in &info.prefixes {
+                if !report.prefixes.contains(prefix) {
+                    report.prefixes.push(prefix.clone());
+                }
+            }
+            report.asn.push(info);
+        }
+        if let Some(host) = internetdb(http, ip).await {
+            report.shodan.push(host);
+        }
+    }
+
+    let mut seen_hosts: BTreeSet<String> = BTreeSet::new();
+    for (host, ip) in host_ips {
+        if !seen_hosts.insert(host.clone()) {
+            continue;
+        }
+        if let Some(a) = report.asn.iter().find(|a| a.ip == ip) {
+            report.host_asn.push(HostAsn {
+                host,
+                ip: ip.clone(),
+                asn: a.asn,
+                holder: a.name.clone(),
+                prefix: a.prefixes.first().cloned().unwrap_or_default(),
+            });
+        }
+    }
+    log::ok(&format!(
+        "{} IP, {} ASN, {} hostów z ASN",
+        ips.len(),
+        report.asn.len(),
+        report.host_asn.len()
+    ));
+
     if opts.favicon && !hosts.is_empty() {
-        log::stage("Favicon hash (Shodan)");
+        log::stage("Favicon hash (wszystkie żywe hosty)");
         let key = std::env::var("SHODAN_API_KEY").ok();
         let mut groups: BTreeMap<i64, Vec<String>> = BTreeMap::new();
         for host in hosts.iter().take(opts.favicon_hosts.max(1)) {
@@ -1074,10 +1264,14 @@ pub async fn run(
                 groups.entry(hash).or_default().push(host.clone());
             }
         }
+        let mut searched = 0;
         for (hash, group_hosts) in groups {
             let related = match &key {
-                Some(key) => shodan_favicon(http, hash, key).await,
-                None => Vec::new(),
+                Some(key) if searched < 5 => {
+                    searched += 1;
+                    shodan_favicon(http, hash, key).await
+                }
+                _ => Vec::new(),
             };
             report.favicons.push(FaviconGroup {
                 hash,
@@ -1097,6 +1291,85 @@ pub async fn run(
         log::ok(&format!("{} grup favicon", report.favicons.len()));
     }
 
+    // Related infrastructure: reverse IP + certificate SANs.
+    let mut seen_related: BTreeSet<String> = report.subdomains.iter().cloned().collect();
+    log::stage("Powiązane hosty (reverse IP, SAN-y certyfikatów)");
+    for ip in ips.iter().take(3) {
+        if is_private_ip(ip) {
+            continue;
+        }
+        let url = format!("https://api.hackertarget.com/reverseiplookup/?q={ip}");
+        let Ok(body) = http.source_body(&url, 1_000_000).await else {
+            continue;
+        };
+        if body.contains("error") || body.contains("API count") {
+            continue;
+        }
+        for line in body.lines().take(80) {
+            let name = line.trim().to_ascii_lowercase();
+            if name.is_empty() || name.contains(' ') || !name.contains('.') {
+                continue;
+            }
+            if seen_related.insert(name.clone()) && report.related.len() < 80 {
+                report.related.push(Related {
+                    in_scope: scope.allows(&name),
+                    name,
+                    source: "reverse-ip",
+                    note: ip.clone(),
+                });
+            }
+        }
+    }
+
+    for host in hosts.iter().take(3) {
+        let bare = util::normalize_host(host).unwrap_or_else(|| host.clone());
+        if util::is_ip(&bare) {
+            continue;
+        }
+        let url = format!("https://crt.sh/?q=%25.{bare}&output=json");
+        let Ok(body) = http.source_body(&url, 6_000_000).await else {
+            continue;
+        };
+        let Ok(json) = serde_json::from_str::<Value>(&body) else {
+            continue;
+        };
+        let Some(rows) = json.as_array() else {
+            continue;
+        };
+        for row in rows.iter().take(200) {
+            if let Some(names) = row.get("name_value").and_then(|v| v.as_str()) {
+                for name in names.lines().take(20) {
+                    let name = name.trim().trim_start_matches("*.").to_ascii_lowercase();
+                    if name.is_empty() || !name.contains('.') || name.len() > 120 {
+                        continue;
+                    }
+                    if seen_related.insert(name.clone()) && report.related.len() < 120 {
+                        report.related.push(Related {
+                            in_scope: scope.allows(&name),
+                            name,
+                            source: "ct-san",
+                            note: bare.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    log::ok(&format!("{} powiązanych hostów", report.related.len()));
+
+    Ok(())
+}
+
+pub async fn run(
+    http: &Http,
+    resolver: &Resolver,
+    scope: &Scope,
+    domain: &str,
+    hosts: &[String],
+    opts: &Options,
+) -> Result<OsintReport> {
+    let mut report = pre(http, resolver, scope, domain, hosts, opts).await?;
+    enrich(http, resolver, scope, &mut report, hosts, opts).await?;
     Ok(report)
 }
 

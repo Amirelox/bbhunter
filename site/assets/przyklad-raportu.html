@@ -700,6 +700,10 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.status[data-class="0"] {
+  color: var(--color-text-muted);
+}
+
 .status[data-class="2"] {
   color: var(--color-text);
 }
@@ -1134,6 +1138,53 @@ h2 {
   }
 }
 
+/* --- OSINT w raporcie ---------------------------------------------------- */
+.alias-note {
+  display: block;
+  margin-block-start: 2px;
+  font-size: var(--size-12);
+  color: var(--color-text-muted);
+}
+
+.osint-sub {
+  margin-block-start: var(--space-5);
+}
+
+.osint-sub h3 {
+  margin-block-end: var(--space-2);
+  font-size: var(--size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--size-13);
+}
+
+.kv dt {
+  font-family: var(--font-mono);
+  font-size: var(--size-12);
+  color: var(--color-text-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--size-12);
+  color: var(--color-text-muted);
+}
+
+.tag--in {
+  color: var(--color-accent);
+}
+
 </style>
 </head>
 <body>
@@ -1144,13 +1195,13 @@ h2 {
     <div>
       <p class="kicker">bbhunter · raport rekonesansu</p>
       <h1 class="target">127.0.0.1<span class="target__port">:8765</span></h1>
-      <p class="submeta">24 lis 2026, 23:06 · zakres wymuszony · 2 hosty</p>
+      <p class="submeta">25 lis 2026, 17:41 · zakres wymuszony · 1 host</p>
     </div>
     <div class="figure" data-sev="high">
-      <p class="figure__num num">10</p>
+      <p class="figure__num num">2</p>
       <div>
-        <p class="figure__label">wysokich ustaleń</p>
-        <p class="figure__of">łącznie 28 ustaleń</p>
+        <p class="figure__label">wysokie ustalenia</p>
+        <p class="figure__of">łącznie 8 ustaleń</p>
       </div>
     </div>
   </div>
@@ -1166,19 +1217,19 @@ h2 {
   <p class="st__sev">wejście skanu</p>
 </li>
 <li class="st" data-sev="medium">
-  <p class="st__num num">2</p>
-  <p class="st__label">hosty</p>
-  <p class="st__sev"><span class="sevpart medium">2 średnie</span> · <span class="sevpart low">4 niskie</span> · <span class="sevpart info">6 informacyjnych</span></p>
+  <p class="st__num num">1</p>
+  <p class="st__label">host</p>
+  <p class="st__sev"><span class="sevpart medium">1 średnie</span> · <span class="sevpart low">2 niskie</span> · <span class="sevpart info">3 informacyjne</span></p>
+</li>
+<li class="st" data-sev="none">
+  <p class="st__num num">1</p>
+  <p class="st__label">strona</p>
+  <p class="st__sev">brak ustaleń</p>
 </li>
 <li class="st" data-sev="high">
-  <p class="st__num num">6</p>
-  <p class="st__label">stron</p>
-  <p class="st__sev"><span class="sevpart high">4 wysokie</span> · <span class="sevpart low">2 niskie</span></p>
-</li>
-<li class="st" data-sev="high">
-  <p class="st__num num">56</p>
+  <p class="st__num num">28</p>
   <p class="st__label">ścieżek</p>
-  <p class="st__sev"><span class="sevpart high">6 wysokich</span> · <span class="sevpart medium">2 średnie</span> · <span class="sevpart info">2 informacyjne</span></p>
+  <p class="st__sev"><span class="sevpart high">2 wysokie</span></p>
 </li>
     </ol>
   </div>
@@ -1189,7 +1240,7 @@ h2 {
     <section class="block" aria-labelledby="findings-title">
       <div class="block__head">
         <h2 id="findings-title"><span class="tick" aria-hidden="true"></span>Ustalenia</h2>
-        <p class="block__meta">28</p>
+        <p class="block__meta">8</p>
       </div>
       <table class="ledger">
   <caption class="sr-only">Ustalenia z automatycznych sprawdzeń, od najwyższej wagi</caption>
@@ -1220,78 +1271,6 @@ h2 {
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">ścieżki</td>
 </tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony Spring Actuator /env (sekrety, zmienne środowiskowe)</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/actuator/env" rel="noreferrer">http://127.0.0.1:8765/actuator/env</a> · konfiguracja</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">klucz Stripe live w JavaScripcie</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/static/app.js" rel="noreferrer">http://127.0.0.1:8765/static/app.js</a> · sekret w JS</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">crawl</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">klucz dostępu AWS w JavaScripcie</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/static/app.js" rel="noreferrer">http://127.0.0.1:8765/static/app.js</a> · sekret w JS</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">crawl</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony .env z poświadczeniami</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/.env" rel="noreferrer">http://127.0.0.2:8765/.env</a> · konfiguracja</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony .git/HEAD (ujawnienie źródeł)</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/.git/HEAD" rel="noreferrer">http://127.0.0.2:8765/.git/HEAD</a> · repozytorium git</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony Spring Actuator /env (sekrety, zmienne środowiskowe)</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/actuator/env" rel="noreferrer">http://127.0.0.2:8765/actuator/env</a> · konfiguracja</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">klucz Stripe live w JavaScripcie</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/static/app.js" rel="noreferrer">http://127.0.0.2:8765/static/app.js</a> · sekret w JS</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">crawl</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">klucz dostępu AWS w JavaScripcie</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/static/app.js" rel="noreferrer">http://127.0.0.2:8765/static/app.js</a> · sekret w JS</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">crawl</td>
-</tr>
 <tr data-sev="medium">
   <td class="c-sev"><span class="sev">średnie</span></td>
   <td class="c-find">
@@ -1300,33 +1279,6 @@ h2 {
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="medium">
-  <td class="c-sev"><span class="sev">średnie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony Apache server-status</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/server-status" rel="noreferrer">http://127.0.0.1:8765/server-status</a> · debug</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="medium">
-  <td class="c-sev"><span class="sev">średnie</span></td>
-  <td class="c-find">
-    <span class="find__title">Brak Content-Security-Policy</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/" rel="noreferrer">http://127.0.0.2:8765/</a> · nagłówki</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="medium">
-  <td class="c-sev"><span class="sev">średnie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony Apache server-status</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/server-status" rel="noreferrer">http://127.0.0.2:8765/server-status</a> · debug</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">ścieżki</td>
 </tr>
 <tr data-sev="low">
   <td class="c-sev"><span class="sev">niskie</span></td>
@@ -1345,42 +1297,6 @@ h2 {
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="low">
-  <td class="c-sev"><span class="sev">niskie</span></td>
-  <td class="c-find">
-    <span class="find__title">Włączone listowanie katalogu</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/uploads/" rel="noreferrer">http://127.0.0.1:8765/uploads/</a> · listowanie katalogu</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">crawl</td>
-</tr>
-<tr data-sev="low">
-  <td class="c-sev"><span class="sev">niskie</span></td>
-  <td class="c-find">
-    <span class="find__title">Brak X-Content-Type-Options: nosniff</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/" rel="noreferrer">http://127.0.0.2:8765/</a> · nagłówki</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="low">
-  <td class="c-sev"><span class="sev">niskie</span></td>
-  <td class="c-find">
-    <span class="find__title">Brak ochrony przed clickjackingiem (X-Frame-Options / CSP frame-ancestors)</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/" rel="noreferrer">http://127.0.0.2:8765/</a> · nagłówki</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="low">
-  <td class="c-sev"><span class="sev">niskie</span></td>
-  <td class="c-find">
-    <span class="find__title">Włączone listowanie katalogu</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/uploads/" rel="noreferrer">http://127.0.0.2:8765/uploads/</a> · listowanie katalogu</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">crawl</td>
 </tr>
 <tr data-sev="info">
   <td class="c-sev"><span class="sev">informacyjne</span></td>
@@ -1409,51 +1325,6 @@ h2 {
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
 </tr>
-<tr data-sev="info">
-  <td class="c-sev"><span class="sev">informacyjne</span></td>
-  <td class="c-find">
-    <span class="find__title">Wykryty endpoint GraphQL</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/graphql" rel="noreferrer">http://127.0.0.1:8765/graphql</a> · dokumentacja API</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="info">
-  <td class="c-sev"><span class="sev">informacyjne</span></td>
-  <td class="c-find">
-    <span class="find__title">Brak Permissions-Policy</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/" rel="noreferrer">http://127.0.0.2:8765/</a> · nagłówki</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="info">
-  <td class="c-sev"><span class="sev">informacyjne</span></td>
-  <td class="c-find">
-    <span class="find__title">Brak Referrer-Policy</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/" rel="noreferrer">http://127.0.0.2:8765/</a> · nagłówki</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="info">
-  <td class="c-sev"><span class="sev">informacyjne</span></td>
-  <td class="c-find">
-    <span class="find__title">Ujawniona wersja w `server`</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/" rel="noreferrer">http://127.0.0.2:8765/</a> · ujawnienie</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">sonda</td>
-</tr>
-<tr data-sev="info">
-  <td class="c-sev"><span class="sev">informacyjne</span></td>
-  <td class="c-find">
-    <span class="find__title">Wykryty endpoint GraphQL</span>
-    <span class="find__path"><a href="http://127.0.0.2:8765/graphql" rel="noreferrer">http://127.0.0.2:8765/graphql</a> · dokumentacja API</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.2</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
   </tbody>
 </table>
     </section>
@@ -1461,7 +1332,7 @@ h2 {
     <section class="block" aria-labelledby="hosts-title">
       <div class="block__head">
         <h2 id="hosts-title"><span class="tick" aria-hidden="true"></span>Hosty</h2>
-        <p class="block__meta">2</p>
+        <p class="block__meta">1</p>
       </div>
       <table class="hosts">
   <caption class="sr-only">Hosty, które odpowiedziały po HTTP</caption>
@@ -1475,13 +1346,7 @@ h2 {
   </thead>
   <tbody>
 <tr>
-  <td class="c-name"><span class="cell-name">127.0.0.1:8765</span></td>
-  <td class="c-status"><span class="status" data-class="2">200</span></td>
-  <td class="c-tech cell-tech">—</td>
-  <td class="c-title cell-title">ACME Portal</td>
-</tr>
-<tr>
-  <td class="c-name"><span class="cell-name">127.0.0.2:8765</span></td>
+  <td class="c-name"><span class="cell-name">127.0.0.1:8765</span><span class="alias-note">aliasy: 127.0.0.2:8765</span></td>
   <td class="c-status"><span class="status" data-class="2">200</span></td>
   <td class="c-tech cell-tech">—</td>
   <td class="c-title cell-title">ACME Portal</td>
@@ -1493,94 +1358,35 @@ h2 {
     <section class="block" aria-labelledby="leads-title">
       <div class="block__head">
         <h2 id="leads-title"><span class="tick" aria-hidden="true"></span>Leady według rodzaju</h2>
-        <p class="block__meta">38</p>
+        <p class="block__meta">1</p>
       </div>
       <div class="leads"><details class="lead">
-  <summary><span class="lead__name">api-endpoints</span><span class="lead__n">12</span></summary>
-  <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/api/" rel="noreferrer">http://127.0.0.1:8765/api/</a></li>
-<li><a href="http://127.0.0.1:8765/api/internal" rel="noreferrer">http://127.0.0.1:8765/api/internal</a></li>
-<li><a href="http://127.0.0.1:8765/api/v1/orders/123" rel="noreferrer">http://127.0.0.1:8765/api/v1/orders/123</a></li>
-<li><a href="http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home</a></li>
-<li><a href="http://127.0.0.1:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?next=/home</a></li>
-<li><a href="http://127.0.0.1:8765/graphql" rel="noreferrer">http://127.0.0.1:8765/graphql</a></li>
-<li><a href="http://127.0.0.2:8765/api/" rel="noreferrer">http://127.0.0.2:8765/api/</a></li>
-<li><a href="http://127.0.0.2:8765/api/internal" rel="noreferrer">http://127.0.0.2:8765/api/internal</a></li>
-<li><a href="http://127.0.0.2:8765/api/v1/orders/123" rel="noreferrer">http://127.0.0.2:8765/api/v1/orders/123</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?next=/home</a></li>
-<li><a href="http://127.0.0.2:8765/graphql" rel="noreferrer">http://127.0.0.2:8765/graphql</a></li>
-  </ul>
-</details>
-<details class="lead">
-  <summary><span class="lead__name">redirect-params</span><span class="lead__n">6</span></summary>
-  <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home  [keys: id,next]</a></li>
-<li><a href="http://127.0.0.1:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?next=/home  [keys: next]</a></li>
-<li><a href="http://127.0.0.1:8765/search?q=test&amp;redirect=/home" rel="noreferrer">http://127.0.0.1:8765/search?q=test&amp;redirect=/home  [keys: q,redirect]</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home  [keys: id,next]</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?next=/home  [keys: next]</a></li>
-<li><a href="http://127.0.0.2:8765/search?q=test&amp;redirect=/home" rel="noreferrer">http://127.0.0.2:8765/search?q=test&amp;redirect=/home  [keys: q,redirect]</a></li>
-  </ul>
-</details>
-<details class="lead">
-  <summary><span class="lead__name">urls-with-params</span><span class="lead__n">6</span></summary>
-  <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home</a></li>
-<li><a href="http://127.0.0.1:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?next=/home</a></li>
-<li><a href="http://127.0.0.1:8765/search?q=test&amp;redirect=/home" rel="noreferrer">http://127.0.0.1:8765/search?q=test&amp;redirect=/home</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?next=/home</a></li>
-<li><a href="http://127.0.0.2:8765/search?q=test&amp;redirect=/home" rel="noreferrer">http://127.0.0.2:8765/search?q=test&amp;redirect=/home</a></li>
-  </ul>
-</details>
-<details class="lead">
-  <summary><span class="lead__name">admin-panels</span><span class="lead__n">4</span></summary>
+  <summary><span class="lead__name">admin-panels</span><span class="lead__n">1</span></summary>
   <ul class="lead__list">
 <li><a href="http://127.0.0.1:8765/admin/" rel="noreferrer">http://127.0.0.1:8765/admin/</a></li>
-<li><a href="http://127.0.0.1:8765/api/internal" rel="noreferrer">http://127.0.0.1:8765/api/internal</a></li>
-<li><a href="http://127.0.0.2:8765/admin/" rel="noreferrer">http://127.0.0.2:8765/admin/</a></li>
-<li><a href="http://127.0.0.2:8765/api/internal" rel="noreferrer">http://127.0.0.2:8765/api/internal</a></li>
-  </ul>
-</details>
-<details class="lead">
-  <summary><span class="lead__name">file-upload</span><span class="lead__n">4</span></summary>
-  <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/upload/attachment" rel="noreferrer">http://127.0.0.1:8765/upload/attachment</a></li>
-<li><a href="http://127.0.0.1:8765/uploads/" rel="noreferrer">http://127.0.0.1:8765/uploads/</a></li>
-<li><a href="http://127.0.0.2:8765/upload/attachment" rel="noreferrer">http://127.0.0.2:8765/upload/attachment</a></li>
-<li><a href="http://127.0.0.2:8765/uploads/" rel="noreferrer">http://127.0.0.2:8765/uploads/</a></li>
-  </ul>
-</details>
-<details class="lead">
-  <summary><span class="lead__name">user-account</span><span class="lead__n">4</span></summary>
-  <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?id=1&amp;next=/home</a></li>
-<li><a href="http://127.0.0.1:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.1:8765/api/v2/users?next=/home</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?id=1&amp;next=/home</a></li>
-<li><a href="http://127.0.0.2:8765/api/v2/users?next=/home" rel="noreferrer">http://127.0.0.2:8765/api/v2/users?next=/home</a></li>
-  </ul>
-</details>
-<details class="lead">
-  <summary><span class="lead__name">payment-checkout</span><span class="lead__n">2</span></summary>
-  <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/api/v1/orders/123" rel="noreferrer">http://127.0.0.1:8765/api/v1/orders/123</a></li>
-<li><a href="http://127.0.0.2:8765/api/v1/orders/123" rel="noreferrer">http://127.0.0.2:8765/api/v1/orders/123</a></li>
   </ul>
 </details>
 </div>
     </section>
+    <section class="block" aria-labelledby="osint-title">
+  <div class="block__head">
+    <h2 id="osint-title"><span class="tick" aria-hidden="true"></span>OSINT</h2>
+    <p class="block__meta">1</p>
+  </div>
+  <div class="osint-sub"><h3>ASN i prefiksy</h3><table class="hosts"><thead><tr><th>ASN</th><th>Operator</th><th>Prefiks</th></tr></thead><tbody><tr><td class="mono">AS0</td><td>None&quot;,</td><td class="mono">None&quot;,</td></tr></tbody></table></div><div class="osint-sub"><h3>Favicony</h3><ul class="lead__list"><li><span class="mono">-1391205141</span> · 127.0.0.1:8765</li></ul></div>
+</section>
   </div>
 
   <aside class="rail" aria-label="Podsumowanie skanu"><section aria-label="Zasięg">
   <p class="rail__label"><span class="tick" aria-hidden="true"></span>Zasięg</p>
   <ul class="rows">
 <li><span>subdomeny</span><span class="n">3</span></li>
-<li><span>hosty</span><span class="n">2</span></li>
-<li><span>adresów URL</span><span class="n">21</span></li>
-<li><span>endpointów</span><span class="n">16</span></li>
-<li><span>pliki JS</span><span class="n">2</span></li>
-<li><span>potencjalne sekrety</span><span class="n">2</span></li>
+<li><span>host</span><span class="n">1</span></li>
+<li><span>adresy URL</span><span class="n">2</span></li>
+<li><span>endpoint</span><span class="n">1</span></li>
+<li><span>plik JS</span><span class="n">1</span></li>
+<li><span>potencjalnych sekretów</span><span class="n">0</span></li>
+<li><span>aliasy</span><span class="n">1</span></li>
   </ul>
 </section><section aria-label="Statusy odpowiedzi">
   <p class="rail__label"><span class="tick" aria-hidden="true"></span>Statusy</p>
@@ -1605,7 +1411,7 @@ h2 {
 <footer class="footer">
   <div class="wrap">
     <p>Wyniki automatyczne to tropy, nie potwierdzone podatności. Otwórz każdy wysoko oceniony wiersz w Burpie i potwierdź wpływ, zanim zgłosisz.</p>
-    <p class="mono">bbhunter 0.1.0 · wygenerowano 24 lis 2026, 23:06</p>
+    <p class="mono">bbhunter 0.1.0 · wygenerowano 25 lis 2026, 17:41</p>
   </div>
 </footer>
 </body>

@@ -154,10 +154,44 @@ fn redact(secret: &str) -> String {
     format!("{head}…{tail} ({} chars)", chars.len())
 }
 
+fn is_placeholder(secret: &str) -> bool {
+    let lower = secret.to_ascii_lowercase();
+    if [
+        "example",
+        "xxxx",
+        "your_",
+        "your-",
+        "placeholder",
+        "changeme",
+        "dummy",
+        "test_key",
+        "sample",
+        "redacted",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        return true;
+    }
+    if lower == "akiaiosfodnn7example" {
+        return true;
+    }
+    let mut chars = lower.chars();
+    if let Some(first) = chars.next() {
+        if chars.all(|c| c == first) {
+            return true;
+        }
+    }
+    false
+}
+
 fn scan_secrets(text: &str, url: &str, out: &mut Vec<SecretHit>, show: bool) {
     for (kind, re) in SECRET_RULES.iter() {
         for m in re.find_iter(text).take(3) {
             let raw = m.as_str();
+            if is_placeholder(raw) {
+                continue;
+            }
             let preview = if show { raw.to_string() } else { redact(raw) };
             out.push(SecretHit {
                 kind: (*kind).to_string(),

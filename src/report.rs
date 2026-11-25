@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::crawl::CrawlResult;
-use crate::findings::{Findings, Severity, Stage};
+use crate::findings::{Finding, Findings, Severity, Stage};
 use crate::osint;
 use crate::paths::PathScan;
 use crate::probe::HostResult;
@@ -27,7 +27,7 @@ pub struct ReportData<'a> {
     pub triage: &'a Triage,
     pub wayback: &'a BTreeSet<String>,
     pub notes: &'a [String],
-    pub osint: Option<&'a osint::Summary>,
+    pub osint: Option<&'a osint::OsintReport>,
 }
 
 // ---------------------------------------------------------------- helpers
@@ -157,6 +157,10 @@ fn sev_parts(counts: [usize; 4]) -> Vec<(Severity, usize)> {
     parts
 }
 
+fn primary_hosts<'a>(data: &'a ReportData<'_>) -> Vec<&'a HostResult> {
+    data.hosts.iter().filter(|h| h.alias_of.is_none()).collect()
+}
+
 fn all_urls(data: &ReportData) -> BTreeSet<String> {
     let mut urls: BTreeSet<String> = BTreeSet::new();
     urls.extend(data.crawl.urls.iter().cloned());
@@ -229,6 +233,9 @@ fn stage_label(stage: Stage) -> &'static str {
 }
 
 fn status_class(code: u16) -> &'static str {
+    if code == 0 {
+        return "0";
+    }
     match code / 100 {
         2 => "2",
         3 => "3",
@@ -278,8 +285,8 @@ fn render_trace(data: &ReportData) -> String {
             "wejście skanu",
         ),
         (
-            data.hosts.len(),
-            plural(data.hosts.len(), "host", "hosty", "hostów"),
+            primary_hosts(data).len(),
+            plural(primary_hosts(data).len(), "host", "hosty", "hostów"),
             worst(probe),
             sev_parts(probe),
             "brak ustaleń",
@@ -363,8 +370,34 @@ fn render_ledger(data: &ReportData) -> String {
         );
     }
 
-    let mut rows = String::new();
+    let mut groups: Vec<(&Finding, Vec<String>)> = Vec::new();
+    let mut index: BTreeMap<(String, String, String), usize> = BTreeMap::new();
     for f in data.findings.items() {
+        let key = (
+            f.severity.as_str().to_string(),
+            f.title.clone(),
+            f.category.clone(),
+        );
+        match index.get(&key) {
+            Some(&i) => groups[i].1.push(f.host.clone()),
+            None => {
+                index.insert(key, groups.len());
+                groups.push((f, vec![f.host.clone()]));
+            }
+        }
+    }
+
+    let mut rows = String::new();
+    for (f, hosts) in groups {
+        let host_cell = if hosts.len() > 1 {
+            format!(
+                "{}<span class=\"alias-note\">+{} hostów</span>",
+                esc(&hosts[0]),
+                hosts.len() - 1
+            )
+        } else {
+            esc(&hosts[0])
+        };
         rows.push_str(&format!(
             r#"<tr data-sev="{sev}">
   <td class="c-sev"><span class="sev">{sev_name}</span></td>
@@ -372,7 +405,7 @@ fn render_ledger(data: &ReportData) -> String {
     <span class="find__title">{title}</span>
     <span class="find__path">{url} · {category}</span>
   </td>
-  <td class="c-host cell-host">{host}</td>
+  <td class="c-host cell-host">{host_cell}</td>
   <td class="c-stage cell-stage">{stage}</td>
 </tr>
 "#,
@@ -381,7 +414,7 @@ fn render_ledger(data: &ReportData) -> String {
             title = esc(&f.title),
             url = link(&f.url, &f.url),
             category = esc(category_label(&f.category)),
-            host = esc(&f.host),
+            host_cell = host_cell,
             stage = stage_label(f.stage),
         ));
     }
@@ -412,21 +445,49 @@ fn render_hosts(data: &ReportData) -> String {
             .to_string();
     }
 
+    let mut aliases: BTreeMap<&str, Vec<&HostResult>> = BTreeMap::new();
+    for h in data.hosts.iter() {
+        if let Some(primary) = &h.alias_of {
+            aliases.entry(primary.as_str()).or_default().push(h);
+        }
+    }
+    let primaries: Vec<&HostResult> = data.hosts.iter().filter(|h| h.alias_of.is_none()).collect();
+
     let mut rows = String::new();
-    for h in data.hosts {
-        let tech = if h.tech.is_empty() {
+    for h in primaries.iter().copied() {
+        let tech = if !h.services.is_empty() {
+            h.services.join(" · ")
+        } else if h.tech.is_empty() {
             "—".to_string()
         } else {
             h.tech.join(" · ")
         };
-        let title = if h.title.is_empty() {
+        let title = if h.status == 0 {
+            "host bez HTTP".to_string()
+        } else if h.title.is_empty() {
             "—".to_string()
         } else {
             h.title.clone()
         };
+        let alias_line = match aliases.get(h.host.as_str()) {
+            Some(list) if !list.is_empty() => {
+                let names: Vec<&str> = list.iter().take(4).map(|a| a.host.as_str()).collect();
+                let extra = list.len().saturating_sub(4);
+                format!(
+                    "<span class=\"alias-note\">aliasy: {}{}</span>",
+                    esc(&names.join(", ")),
+                    if extra > 0 {
+                        format!(" +{extra}")
+                    } else {
+                        String::new()
+                    }
+                )
+            }
+            _ => String::new(),
+        };
         rows.push_str(&format!(
             r#"<tr>
-  <td class="c-name"><span class="cell-name">{host}</span></td>
+  <td class="c-name"><span class="cell-name">{host}</span>{alias_line}</td>
   <td class="c-status"><span class="status" data-class="{cls}">{code}</span></td>
   <td class="c-tech cell-tech">{tech}</td>
   <td class="c-title cell-title">{title}</td>
@@ -434,7 +495,11 @@ fn render_hosts(data: &ReportData) -> String {
 "#,
             host = esc(&h.host),
             cls = status_class(h.status),
-            code = h.status,
+            code = if h.status == 0 {
+                "—".to_string()
+            } else {
+                h.status.to_string()
+            },
             tech = esc(&tech),
             title = esc(&title),
         ));
@@ -507,8 +572,8 @@ fn render_rail(data: &ReportData, urls: &BTreeSet<String>) -> String {
             data.subdomains.len(),
         ),
         (
-            plural(data.hosts.len(), "host", "hosty", "hostów"),
-            data.hosts.len(),
+            plural(primary_hosts(data).len(), "host", "hosty", "hostów"),
+            primary_hosts(data).len(),
         ),
         (
             plural(urls.len(), "adres URL", "adresy URL", "adresów URL"),
@@ -537,12 +602,18 @@ fn render_rail(data: &ReportData, urls: &BTreeSet<String>) -> String {
             data.crawl.secrets.len(),
         ),
     ];
+    let alias_count = data.hosts.iter().filter(|h| h.alias_of.is_some()).count();
     let mut rows_html = String::new();
     for (label, n) in rows {
         rows_html.push_str(&format!(
             "<li><span>{}</span><span class=\"n\">{}</span></li>\n",
             esc(label),
             n
+        ));
+    }
+    if alias_count > 0 {
+        rows_html.push_str(&format!(
+            "<li><span>aliasy</span><span class=\"n\">{alias_count}</span></li>\n"
         ));
     }
     out.push_str(&format!(
@@ -592,12 +663,13 @@ fn render_rail(data: &ReportData, urls: &BTreeSet<String>) -> String {
 
     // OSINT
     if let Some(o) = data.osint {
+        let summary = o.summary();
         let rows = [
-            ("subdomeny", o.subdomains),
-            ("kandydaci chmury", o.cloud),
-            ("dorki", o.dorks),
-            ("trafienia w kodzie", o.code_hits),
-            ("favicony", o.favicons),
+            ("subdomeny", summary.subdomains),
+            ("kandydaci chmury", summary.cloud),
+            ("dorki", summary.dorks),
+            ("trafienia w kodzie", summary.code_hits),
+            ("favicony", summary.favicons),
         ];
         let mut html = String::new();
         for (label, n) in rows {
@@ -655,6 +727,148 @@ fn render_footer(data: &ReportData) -> String {
     )
 }
 
+fn render_osint(o: &osint::OsintReport) -> String {
+    let mut body = String::new();
+
+    if let Some(r) = &o.rdap {
+        let mut kv = String::new();
+        if let Some(v) = &r.registrar {
+            kv.push_str(&format!("<dt>Rejestrator</dt><dd>{}</dd>", esc(v)));
+        }
+        if let Some(v) = &r.registered {
+            kv.push_str(&format!("<dt>Rejestracja</dt><dd>{}</dd>", esc(v)));
+        }
+        if let Some(v) = &r.expires {
+            kv.push_str(&format!("<dt>Wygasa</dt><dd>{}</dd>", esc(v)));
+        }
+        if !r.nameservers.is_empty() {
+            kv.push_str(&format!(
+                "<dt>Nameservery</dt><dd>{}</dd>",
+                esc(&r.nameservers.join(", "))
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>RDAP</h3><dl class=\"kv\">{kv}</dl></div>"
+        ));
+    }
+
+    if !o.asn.is_empty() {
+        let mut seen: BTreeSet<(u32, String)> = BTreeSet::new();
+        let mut rows = String::new();
+        for a in &o.asn {
+            let prefix = a.prefixes.first().cloned().unwrap_or_default();
+            if !seen.insert((a.asn, prefix.clone())) {
+                continue;
+            }
+            rows.push_str(&format!(
+                "<tr><td class=\"mono\">AS{}</td><td>{}</td><td class=\"mono\">{}</td></tr>",
+                a.asn,
+                esc(&a.name),
+                esc(&prefix)
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>ASN i prefiksy</h3><table class=\"hosts\"><thead><tr><th>ASN</th><th>Operator</th><th>Prefiks</th></tr></thead><tbody>{rows}</tbody></table></div>"
+        ));
+    }
+
+    if !o.cloud.is_empty() {
+        let mut rows = String::new();
+        for c in &o.cloud {
+            rows.push_str(&format!(
+                "<tr><td>{}</td><td class=\"mono\">{}</td><td class=\"mono\">{}</td><td>{}</td><td>{}</td></tr>",
+                esc(c.provider),
+                esc(&c.name),
+                c.status,
+                esc(c.kind),
+                if c.mentions_domain { "tak" } else { "—" }
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>Kandydaci w chmurze</h3><table class=\"hosts\"><thead><tr><th>Dostawca</th><th>Nazwa</th><th>HTTP</th><th>Status</th><th>Domena w listingu</th></tr></thead><tbody>{rows}</tbody></table><p class=\"alias-note\">Istnienie nazwy nie potwierdza własności; sprawdź przed zgłoszeniem.</p></div>"
+        ));
+    }
+
+    if !o.favicons.is_empty() {
+        let mut rows = String::new();
+        for g in &o.favicons {
+            rows.push_str(&format!(
+                "<li><span class=\"mono\">{}</span> · {}</li>",
+                g.hash,
+                esc(&g.hosts.join(", "))
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>Favicony</h3><ul class=\"lead__list\">{rows}</ul></div>"
+        ));
+    }
+
+    if !o.related.is_empty() {
+        let mut rows = String::new();
+        for r in &o.related {
+            rows.push_str(&format!(
+                "<li><span class=\"mono\">{}</span> · <span class=\"tag{}\">{}</span> · {}</li>",
+                esc(&r.name),
+                if r.in_scope { " tag--in" } else { "" },
+                if r.in_scope {
+                    "w zakresie"
+                } else {
+                    "poza zakresem"
+                },
+                esc(r.source)
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>Powiązane hosty</h3><ul class=\"lead__list\">{rows}</ul></div>"
+        ));
+    }
+
+    if !o.dorks.is_empty() {
+        let mut rows = String::new();
+        for d in &o.dorks {
+            rows.push_str(&format!(
+                "<li><a href=\"{}\" rel=\"noreferrer\">{} — {}</a></li>",
+                esc(&d.url),
+                esc(d.engine),
+                esc(d.label)
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>Dorki</h3><ul class=\"lead__list\">{rows}</ul></div>"
+        ));
+    }
+
+    if !o.code_hits.is_empty() {
+        let mut rows = String::new();
+        for h in &o.code_hits {
+            rows.push_str(&format!(
+                "<li><a href=\"{}\" rel=\"noreferrer\">{}</a> · <span class=\"mono\">{}</span></li>",
+                esc(&h.url),
+                esc(&h.repo),
+                esc(&h.path)
+            ));
+        }
+        body.push_str(&format!(
+            "<div class=\"osint-sub\"><h3>Kod publiczny</h3><ul class=\"lead__list\">{rows}</ul></div>"
+        ));
+    }
+
+    if body.is_empty() {
+        return String::new();
+    }
+
+    format!(
+        r#"<section class="block" aria-labelledby="osint-title">
+  <div class="block__head">
+    <h2 id="osint-title"><span class="tick" aria-hidden="true"></span>OSINT</h2>
+    <p class="block__meta">{}</p>
+  </div>
+  {body}
+</section>"#,
+        o.subdomains.len()
+    )
+}
+
 // ------------------------------------------------------------------- html
 
 fn html(data: &ReportData) -> String {
@@ -682,6 +896,7 @@ fn html(data: &ReportData) -> String {
         Some(sev) => headline_phrase(head_n, sev),
         None => "ustaleń".to_string(),
     };
+    let osint_section = data.osint.map(render_osint).unwrap_or_default();
     let figure_of = if total == 0 {
         "automatyczne sprawdzenia".to_string()
     } else {
@@ -759,6 +974,7 @@ fn html(data: &ReportData) -> String {
       </div>
       {leads}
     </section>
+    {osint_section}
   </div>
 
   {rail}
@@ -773,8 +989,8 @@ fn html(data: &ReportData) -> String {
         port_html = port_html,
         started = esc(&pl_datetime(&data.started)),
         scope_text = scope_text,
-        hosts_n = data.hosts.len(),
-        hosts_word = plural(data.hosts.len(), "host", "hosty", "hostów"),
+        hosts_n = primary_hosts(data).len(),
+        hosts_word = plural(primary_hosts(data).len(), "host", "hosty", "hostów"),
         head_sev_token = head_sev.map(|s| s.as_str()).unwrap_or("none"),
         head_n = head_n,
         figure_label = esc(&figure_label),
@@ -785,6 +1001,7 @@ fn html(data: &ReportData) -> String {
         hosts = render_hosts(data),
         leads = render_leads(data),
         leads_n = data.triage.total(),
+        osint_section = osint_section,
         rail = render_rail(data, &urls),
         footer = render_footer(data),
         fonts = FONTS_CSS,
@@ -890,6 +1107,36 @@ fn markdown(data: &ReportData) -> String {
         }
     }
 
+    if let Some(o) = data.osint {
+        md.push_str("## OSINT\n\n");
+        if let Some(r) = &o.rdap {
+            if let Some(v) = &r.registrar {
+                md.push_str(&format!("- Rejestrator: {v}\n"));
+            }
+            if let Some(v) = &r.registered {
+                md.push_str(&format!("- Rejestracja: {v}\n"));
+            }
+        }
+        if !o.asn.is_empty() {
+            let names: Vec<String> = o
+                .asn
+                .iter()
+                .map(|a| format!("AS{} {}", a.asn, a.name))
+                .collect();
+            md.push_str(&format!("- ASN: {}\n", names.join(", ")));
+        }
+        if !o.cloud.is_empty() {
+            md.push_str(&format!("- Kandydaci chmury: {}\n", o.cloud.len()));
+        }
+        if !o.favicons.is_empty() {
+            md.push_str(&format!("- Grupy favicon: {}\n", o.favicons.len()));
+        }
+        if !o.related.is_empty() {
+            md.push_str(&format!("- Powiązane hosty: {}\n", o.related.len()));
+        }
+        md.push_str("- Szczegóły: `osint/osint.md`\n\n");
+    }
+
     md.push_str("## Co dalej\n\n");
     md.push_str("1. Potwierdź każdy wysoki i średni wiersz ręcznie w Burpie.\n");
     md.push_str("2. Zacznij od `interesting/auth-endpoints.txt`, `interesting/admin-panels.txt` i endpointów API.\n");
@@ -981,7 +1228,8 @@ pub fn write_all(outdir: &Path, data: &ReportData) -> Result<PathBuf> {
         "scope_enforced": data.scope_enforced,
         "counts": {
             "subdomains": data.subdomains.len(),
-            "live_hosts": data.hosts.len(),
+            "live_hosts": primary_hosts(data).len(),
+            "aliases": data.hosts.iter().filter(|h| h.alias_of.is_some()).count(),
             "urls": urls.len(),
             "endpoints": data.crawl.endpoints.len(),
             "js_files": data.crawl.js.len(),

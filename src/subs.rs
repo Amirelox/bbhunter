@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 
 use crate::dnsx::{looks_wildcard, Resolver};
 use crate::http::Http;
@@ -201,51 +203,86 @@ fn valid_child(candidate: &str, root: &str) -> Option<String> {
 }
 
 async fn crtsh(http: &Http, root: &str) -> Vec<String> {
-    let url = format!("https://crt.sh/?q=%25.{root}&output=json");
-    let Ok(f) = http.get(&url).await else {
-        log::warn("crt.sh unreachable, skipping");
-        return Vec::new();
-    };
-    if f.status != 200 {
-        log::warn(&format!("crt.sh returned HTTP {}", f.status));
-        return Vec::new();
-    }
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&f.body) else {
-        log::warn("crt.sh returned non-JSON (probably rate limited)");
-        return Vec::new();
-    };
     let mut out = BTreeSet::new();
-    if let Some(rows) = json.as_array() {
-        for row in rows {
-            if let Some(names) = row.get("name_value").and_then(|v| v.as_str()) {
-                for name in names.lines() {
-                    if let Some(h) = valid_child(name, root) {
-                        out.insert(h);
+
+    let url = format!("https://crt.sh/?q=%25.{root}&output=json");
+    if let Ok(body) = http.source_body(&url, 8_000_000).await {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+            if let Some(rows) = json.as_array() {
+                for row in rows {
+                    if let Some(names) = row.get("name_value").and_then(|v| v.as_str()) {
+                        for name in names.lines() {
+                            if let Some(h) = valid_child(name, root) {
+                                out.insert(h);
+                            }
+                        }
+                    }
+                    if let Some(name) = row.get("common_name").and_then(|v| v.as_str()) {
+                        if let Some(h) = valid_child(name, root) {
+                            out.insert(h);
+                        }
                     }
                 }
             }
-            if let Some(name) = row.get("common_name").and_then(|v| v.as_str()) {
-                if let Some(h) = valid_child(name, root) {
-                    out.insert(h);
+        } else {
+            log::warn("crt.sh returned non-JSON");
+        }
+    } else {
+        log::warn("crt.sh unreachable");
+    }
+
+    if out.is_empty() {
+        log::info("crt.sh: próbuję certspotter");
+        let url = format!(
+            "https://api.certspotter.com/v1/issuances?domain={root}&include_subdomains=true&expand=dns_names"
+        );
+        if let Ok(body) = http.source_body(&url, 8_000_000).await {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                if let Some(rows) = json.as_array() {
+                    for row in rows {
+                        if let Some(names) = row.get("dns_names").and_then(|v| v.as_array()) {
+                            for name in names {
+                                if let Some(h) = name.as_str().and_then(|n| valid_child(n, root)) {
+                                    out.insert(h);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+
+    if out.is_empty() {
+        log::info("crt.sh: próbuję rapiddns");
+        let url = format!("https://rapiddns.io/subdomain/{root}?full=1");
+        if let Ok(body) = http.source_body(&url, 4_000_000).await {
+            if let Ok(re) =
+                regex::Regex::new(&format!(r"(?i)(?:[a-z0-9_-]+\.)+{}", regex::escape(root)))
+            {
+                for m in re.find_iter(&body) {
+                    if let Some(h) = valid_child(m.as_str(), root) {
+                        out.insert(h);
+                    }
+                }
+            }
+        }
+    }
+
     out.into_iter().collect()
 }
 
 async fn hackertarget(http: &Http, root: &str) -> Vec<String> {
     let url = format!("https://api.hackertarget.com/hostsearch/?q={root}");
-    let Ok(f) = http.get(&url).await else {
+    let Ok(body) = http.source_body(&url, 4_000_000).await else {
         log::warn("hackertarget unreachable, skipping");
         return Vec::new();
     };
-    if f.status != 200 || f.body.contains("API count exceeded") {
+    if body.contains("API count exceeded") || body.contains("error") {
         log::warn("hackertarget quota/error, skipping");
         return Vec::new();
     }
-    f.body
-        .lines()
+    body.lines()
         .filter_map(|line| line.split(',').next())
         .filter_map(|h| valid_child(h, root))
         .collect()
@@ -253,11 +290,11 @@ async fn hackertarget(http: &Http, root: &str) -> Vec<String> {
 
 async fn otx(http: &Http, root: &str) -> Vec<String> {
     let url = format!("https://otx.alienvault.com/api/v1/indicators/domain/{root}/passive_dns");
-    let Ok(f) = http.get(&url).await else {
+    let Ok(body) = http.source_body(&url, 4_000_000).await else {
         log::warn("alienvault otx unreachable, skipping");
         return Vec::new();
     };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&f.body) else {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) else {
         return Vec::new();
     };
     let mut out = BTreeSet::new();
@@ -275,10 +312,10 @@ async fn otx(http: &Http, root: &str) -> Vec<String> {
 
 async fn urlscan(http: &Http, root: &str) -> Vec<String> {
     let url = format!("https://urlscan.io/api/v1/search/?q=domain:{root}&size=1000");
-    let Ok(f) = http.get(&url).await else {
+    let Ok(body) = http.source_body(&url, 4_000_000).await else {
         return Vec::new();
     };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&f.body) else {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) else {
         return Vec::new();
     };
     let mut out = BTreeSet::new();
@@ -378,14 +415,15 @@ pub async fn enumerate(
         ));
     }
 
-    let sources: [(&str, futures::future::BoxFuture<'_, Vec<String>>); 4] = [
-        ("crt.sh", Box::pin(crtsh(http, &root))),
-        ("hackertarget", Box::pin(hackertarget(http, &root))),
-        ("otx", Box::pin(otx(http, &root))),
-        ("urlscan", Box::pin(urlscan(http, &root))),
+    let r = root.as_str();
+    type SourceFut<'a> = Pin<Box<dyn Future<Output = (&'static str, Vec<String>)> + Send + 'a>>;
+    let sources: Vec<SourceFut<'_>> = vec![
+        Box::pin(async move { ("crt.sh", crtsh(http, r).await) }),
+        Box::pin(async move { ("hackertarget", hackertarget(http, r).await) }),
+        Box::pin(async move { ("otx", otx(http, r).await) }),
+        Box::pin(async move { ("urlscan", urlscan(http, r).await) }),
     ];
-    for (name, fut) in sources {
-        let hits = fut.await;
+    for (name, hits) in futures::future::join_all(sources).await {
         let before = found.len();
         found.extend(hits);
         let added = found.len() - before;
