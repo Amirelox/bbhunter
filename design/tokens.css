@@ -1,0 +1,103 @@
+/* =========================================================================
+   bbhunter — tokeny
+   Jedyne miejsce, w którym wolno dodawać wartości. Komponenty (report.css)
+   używają wyłącznie tokenów semantycznych, nigdy primitywów ani hexów.
+
+   Notacja: hex. Powód: raport jest jednym plikiem HTML bez builda, a hex jest
+   jedynym formatem, który czyta każdy podgląd i każdy diff. Rampę policzono
+   w OKLCH (patrz design/foundations.md), wynik zapisano w sRGB.
+   ========================================================================= */
+
+:root {
+  color-scheme: dark;
+
+  /* --- primitywy: neutralny, ciepły grafit (hue 84–92° w OKLCH) --------- */
+  --graphite-950: #171614; /* tło strony */
+  --graphite-900: #1d1c19; /* panel */
+  --graphite-800: #262420; /* podniesione: hover wiersza */
+  --paper-100: #efe9de; /* tekst główny */
+  --paper-300: #a9a29a; /* tekst wtórny */
+  --paper-500: #948e84; /* meta */
+
+  /* --- primitywy: akcent, miedź (OKLCH H 55.3°) ------------------------- */
+  --copper-400: #cf8b5b;
+
+  /* --- primitywy: waga ustalenia (H 28.6° / 86.9° / 243.7°) ------------- */
+  --vermillion-400: #e8786b;
+  --ochre-300: #d8b45e;
+  --slate-400: #8aa3b8;
+
+  /* --- semantyczne: powierzchnie ---------------------------------------- */
+  --color-bg: var(--graphite-950);
+  --color-surface: var(--graphite-900);
+  --color-raised: var(--graphite-800);
+  --color-line: color-mix(in srgb, var(--paper-100) 9%, transparent);
+  --color-line-strong: color-mix(in srgb, var(--paper-100) 16%, transparent);
+
+  /* --- semantyczne: tekst (3 role) -------------------------------------- */
+  --color-text: var(--paper-100); /* 14.10:1 na surface */
+  --color-text-secondary: var(--paper-300); /* 6.75:1 */
+  --color-text-muted: var(--paper-500); /* 4.96:1 — tylko meta */
+
+  /* --- semantyczne: akcja i uwaga --------------------------------------- */
+  --color-accent: var(--copper-400); /* 6.08:1 na surface */
+  --color-on-accent: var(--graphite-950); /* 6.46:1 na akcencie */
+  --color-focus: var(--copper-400);
+
+  /* --- semantyczne: waga ustalenia (kolor wzmacnia, nigdy nie niesie sam) */
+  --color-sev-high: var(--vermillion-400); /* 5.95:1 */
+  --color-sev-medium: var(--ochre-300); /* 8.61:1 */
+  --color-sev-low: var(--slate-400); /* 6.50:1 */
+  --color-sev-info: var(--paper-500); /* 4.96:1 */
+
+  /* --- odstępy: siatka 4 px --------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* --- promienie: panele są płaskie, zaokrąglenie tylko na znacznikach --- */
+  --radius-1: 2px; /* znacznik severity, obwódka focusu */
+
+  /* --- typografia -------------------------------------------------------- */
+  --font-ui: "Instrument Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+
+  --size-12: 0.75rem; /* 12 px — dolna granica */
+  --size-13: 0.8125rem; /* 13 px */
+  --size-14: 0.875rem; /* 14 px */
+  --size-20: 1.25rem; /* 20 px */
+  --size-30: 1.875rem; /* 30 px */
+  --size-44: 2.75rem; /* 44 px */
+
+  --lh-tight: 1.1; /* tylko liczby i tytuł strony */
+  --lh-heading: 1.25;
+  --lh-body: 1.5;
+  --lh-meta: 1.4;
+
+  --tracking-display: -0.02em; /* tylko ≥ 24 px */
+  --tracking-flat: 0;
+
+  /* --- układ ------------------------------------------------------------- */
+  --page-max: 1180px;
+  --gutter: 32px;
+  --rail: 300px;
+  --col-gap: 48px;
+  --measure: 68ch; /* 60–75 znaków */
+
+  /* --- ruch -------------------------------------------------------------- */
+  --dur-1: 120ms; /* hover, focus, zmiana stanu */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Breakpointy (media queries nie czytają var — wartości wpisane w report.css):
+     960 px — szyna schodzi pod treść, 640 px — tabele zamieniają się w bloki,
+     320 px — minimalna szerokość, 200% zoom przy 1440 px daje 720 px CSS. */
+}

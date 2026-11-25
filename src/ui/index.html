@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>bbhunter — dashboard</title>
+<style>/*__CSS__*/</style>
+</head>
+<body>
+<a class="skip" href="#view">Przejdź do treści</a>
+
+<div class="shell">
+  <aside class="rail">
+    <a class="brand" href="#/dashboard"><span class="brand__tick" aria-hidden="true"></span>bbhunter</a>
+
+    <nav class="nav" aria-label="Główna">
+      <div class="nav__group">
+        <p class="nav__label">Skan</p>
+        <a class="nav__link" href="#/dashboard" data-route="dashboard">Dashboard</a>
+        <a class="nav__link" href="#/live" data-route="live">Skan na żywo<span class="nav__count" id="nav-live"></span></a>
+        <a class="nav__link" href="#/scans" data-route="scans">Skany<span class="nav__count" id="count-scans"></span></a>
+      </div>
+      <div class="nav__group">
+        <p class="nav__label">Dane</p>
+        <a class="nav__link" href="#/targets" data-route="targets">Cele</a>
+        <a class="nav__link" href="#/findings" data-route="findings">Znaleziska<span class="nav__count" id="count-findings"></span></a>
+        <a class="nav__link" href="#/osint" data-route="osint">OSINT</a>
+      </div>
+      <div class="nav__group">
+        <p class="nav__label">Wynik</p>
+        <a class="nav__link" href="#/reports" data-route="reports">Raporty</a>
+      </div>
+      <div class="nav__group">
+        <p class="nav__label">System</p>
+        <a class="nav__link" href="#/modules" data-route="modules">Moduły i reguły</a>
+        <a class="nav__link" href="#/settings" data-route="settings">Ustawienia</a>
+        <a class="nav__link" href="#/logs" data-route="logs">Logi</a>
+      </div>
+    </nav>
+
+    <div class="rail__foot">
+      <span id="rail-job">bezczynny</span>
+      <span>127.0.0.1</span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="topbar__right">
+        <span class="pill" id="job-pill" data-state="idle">bezczynny</span>
+        <a class="btn btn--primary" id="new-scan-btn" href="#/dashboard?new=1">Nowy skan</a>
+      </div>
+    </header>
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<div id="scrim" class="scrim" hidden></div>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <div class="drawer__head">
+    <h2 class="drawer__title" id="drawer-title"></h2>
+    <button class="drawer__close" id="drawer-close" aria-label="Zamknij">×</button>
+  </div>
+  <div class="drawer__body" id="drawer-body"></div>
+</aside>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>/*__JS__*/</script>
+</body>
+</html>
