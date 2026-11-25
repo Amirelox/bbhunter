@@ -238,151 +238,180 @@ pub async fn crawl_site(
 
     let mut queue: VecDeque<String> = VecDeque::from([start.to_string()]);
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    let limit = max_pages.max(1);
+    let parallel = 4usize;
+    let origin_hdr = [(
+        HeaderName::from_static("origin"),
+        HeaderValue::from_static(CORS_ORIGIN),
+    )];
 
-    while let Some(page) = queue.pop_front() {
-        if out.pages.len() >= max_pages.max(1) {
-            break;
-        }
-        if !seen.insert(page.clone()) {
-            continue;
-        }
-        let Some(host) = util::host_of(&page) else {
-            continue;
-        };
-        if !scope.allows(&host) || is_binary(&page) {
-            continue;
-        }
-
-        let origin_hdr = [(
-            HeaderName::from_static("origin"),
-            HeaderValue::from_static(CORS_ORIGIN),
-        )];
-        let Ok(f) = http.fetch(&page, &origin_hdr, 2_000_000).await else {
-            continue;
-        };
-
-        // CORS matters most on JSON APIs, so check before the HTML filter.
-        let acao = f.header("access-control-allow-origin").unwrap_or("").trim();
-        let creds = f
-            .header("access-control-allow-credentials")
-            .unwrap_or("")
-            .eq_ignore_ascii_case("true");
-        if acao == CORS_ORIGIN || (acao == "*" && creds) {
-            out.cors_hits.push((
-                page.clone(),
-                format!("Access-Control-Allow-Origin: {acao}, Allow-Credentials: {creds}"),
-            ));
-        }
-
-        if !f.is_html() {
-            continue;
-        }
-        out.pages.insert(page.clone());
-
-        let lower_page = f.body.to_ascii_lowercase();
-        if lower_page.contains("<title>index of /")
-            || lower_page.contains("<title>directory listing for")
-        {
-            out.dir_listings.insert(page.clone());
-        }
-
-        let doc = Html::parse_document(&f.body);
-        let base = f.final_url.clone();
-
-        for sel_str in LINK_SELECTORS {
-            let Ok(sel) = Selector::parse(sel_str) else {
+    while !queue.is_empty() && out.pages.len() < limit {
+        let mut batch: Vec<String> = Vec::new();
+        while batch.len() < parallel && out.pages.len() + batch.len() < limit {
+            let Some(page) = queue.pop_front() else {
+                break;
+            };
+            if !seen.insert(page.clone()) {
+                continue;
+            }
+            let Some(host) = util::host_of(&page) else {
                 continue;
             };
-            for el in doc.select(&sel) {
-                let attr = if el.value().name() == "a" || el.value().name() == "area" {
-                    "href"
-                } else {
-                    "src"
-                };
-                let Some(raw) = el.value().attr(attr) else {
+            if !scope.allows(&host) || is_binary(&page) {
+                continue;
+            }
+            batch.push(page);
+        }
+        if batch.is_empty() {
+            break;
+        }
+
+        let results: Vec<(String, anyhow::Result<crate::http::Fetched>)> =
+            stream::iter(batch.into_iter())
+                .map(|page| {
+                    let hdr = &origin_hdr;
+                    async move {
+                        let result = http.fetch(&page, hdr, 1_000_000).await;
+                        (page, result)
+                    }
+                })
+                .buffer_unordered(parallel)
+                .collect()
+                .await;
+
+        for (page, result) in results {
+            let Ok(f) = result else {
+                continue;
+            };
+
+            // CORS matters most on JSON APIs, so check before the HTML filter.
+            let acao = f.header("access-control-allow-origin").unwrap_or("").trim();
+            let creds = f
+                .header("access-control-allow-credentials")
+                .unwrap_or("")
+                .eq_ignore_ascii_case("true");
+            if acao == CORS_ORIGIN || (acao == "*" && creds) {
+                out.cors_hits.push((
+                    page.clone(),
+                    format!("Access-Control-Allow-Origin: {acao}, Allow-Credentials: {creds}"),
+                ));
+            }
+
+            if !f.is_html() {
+                continue;
+            }
+            if out.pages.len() >= limit {
+                break;
+            }
+            out.pages.insert(page.clone());
+
+            let lower_page = f.body.to_ascii_lowercase();
+            if lower_page.contains("<title>index of /")
+                || lower_page.contains("<title>directory listing for")
+            {
+                out.dir_listings.insert(page.clone());
+            }
+
+            let doc = Html::parse_document(&f.body);
+            let base = f.final_url.clone();
+
+            for sel_str in LINK_SELECTORS {
+                let Ok(sel) = Selector::parse(sel_str) else {
                     continue;
                 };
-                if raw.starts_with("javascript:")
-                    || raw.starts_with("mailto:")
-                    || raw.starts_with("tel:")
-                {
-                    continue;
-                }
-                let Ok(base_url) = url::Url::parse(&base) else {
-                    continue;
-                };
-                let Ok(joined) = base_url.join(raw) else {
-                    continue;
-                };
-                if joined.scheme() != "http" && joined.scheme() != "https" {
-                    continue;
-                }
-                let mut s = joined.to_string();
-                if let Some(pos) = s.find('#') {
-                    s.truncate(pos);
-                }
-                if is_binary(&s) {
-                    continue;
-                }
-                if let Some(h) = util::host_of(&s) {
-                    if !scope.allows(&h) {
+                for el in doc.select(&sel) {
+                    let attr = if el.value().name() == "a" || el.value().name() == "area" {
+                        "href"
+                    } else {
+                        "src"
+                    };
+                    let Some(raw) = el.value().attr(attr) else {
+                        continue;
+                    };
+                    if raw.starts_with("javascript:")
+                        || raw.starts_with("mailto:")
+                        || raw.starts_with("tel:")
+                    {
                         continue;
                     }
-                    out.urls.insert(s.clone());
-                    if h == root_host && !seen.contains(&s) {
-                        queue.push_back(s);
+                    let Ok(base_url) = url::Url::parse(&base) else {
+                        continue;
+                    };
+                    let Ok(joined) = base_url.join(raw) else {
+                        continue;
+                    };
+                    if joined.scheme() != "http" && joined.scheme() != "https" {
+                        continue;
+                    }
+                    let mut s = joined.to_string();
+                    if let Some(pos) = s.find('#') {
+                        s.truncate(pos);
+                    }
+                    if is_binary(&s) {
+                        continue;
+                    }
+                    if let Some(h) = util::host_of(&s) {
+                        if !scope.allows(&h) {
+                            continue;
+                        }
+                        out.urls.insert(s.clone());
+                        if h == root_host && !seen.contains(&s) {
+                            queue.push_back(s);
+                        }
                     }
                 }
             }
-        }
 
-        for el in doc.select(&JS_SELECTOR) {
-            if let Some(src) = el.value().attr("src") {
-                if let Ok(base_url) = url::Url::parse(&base) {
-                    if let Ok(joined) = base_url.join(src) {
-                        out.js.insert(joined.to_string());
+            for el in doc.select(&JS_SELECTOR) {
+                if let Some(src) = el.value().attr("src") {
+                    if let Ok(base_url) = url::Url::parse(&base) {
+                        if let Ok(joined) = base_url.join(src) {
+                            out.js.insert(joined.to_string());
+                        }
                     }
                 }
             }
-        }
 
-        for el in doc.select(&FORM_SELECTOR) {
-            let action = el.value().attr("action").unwrap_or("").to_string();
-            let method = el.value().attr("method").unwrap_or("get").to_uppercase();
-            let inputs: Vec<String> = el
-                .select(&Selector::parse("input[name], textarea[name], select[name]").unwrap())
-                .filter_map(|i| i.value().attr("name").map(str::to_string))
-                .collect();
-            let abs = url::Url::parse(&base)
-                .ok()
-                .and_then(|b| b.join(&action).ok())
-                .map(|u| u.to_string())
-                .unwrap_or(action);
-            out.forms
-                .insert(format!("{method} {abs} [{}]", inputs.join(",")));
-        }
+            for el in doc.select(&FORM_SELECTOR) {
+                let action = el.value().attr("action").unwrap_or("").to_string();
+                let method = el.value().attr("method").unwrap_or("get").to_uppercase();
+                let inputs: Vec<String> = el
+                    .select(&Selector::parse("input[name], textarea[name], select[name]").unwrap())
+                    .filter_map(|i| i.value().attr("name").map(str::to_string))
+                    .collect();
+                let abs = url::Url::parse(&base)
+                    .ok()
+                    .and_then(|b| b.join(&action).ok())
+                    .map(|u| u.to_string())
+                    .unwrap_or(action);
+                out.forms
+                    .insert(format!("{method} {abs} [{}]", inputs.join(",")));
+            }
 
-        extract_endpoints(&f.body, &base, &mut out.endpoints);
-        scan_secrets(&f.body, &page, &mut out.secrets, show_secrets);
+            extract_endpoints(&f.body, &base, &mut out.endpoints);
+            scan_secrets(&f.body, &page, &mut out.secrets, show_secrets);
+        }
     }
 
-    // Pull referenced JS bundles and mine them for endpoints / keys.
-    let js_list: Vec<String> = out.js.iter().take(25).cloned().collect();
-    for js in js_list {
-        let Some(h) = util::host_of(&js) else {
-            continue;
-        };
-        if !scope.allows(&h) {
+    // Pull the referenced JS bundles concurrently and mine them.
+    let js_list: Vec<String> = out.js.iter().take(15).cloned().collect();
+    let js_results: Vec<(String, String)> = stream::iter(js_list)
+        .map(|js| async move {
+            let body = match http.fetch(&js, &[], 1_000_000).await {
+                Ok(f) if f.status < 400 => f.body,
+                _ => String::new(),
+            };
+            (js, body)
+        })
+        .buffer_unordered(6)
+        .collect()
+        .await;
+    for (js, body) in js_results {
+        if body.is_empty() {
             continue;
         }
-        let Ok(f) = http.fetch(&js, &[], 3_000_000).await else {
-            continue;
-        };
-        if f.status >= 400 {
-            continue;
-        }
-        extract_endpoints(&f.body, &js, &mut out.endpoints);
-        scan_secrets(&f.body, &js, &mut out.secrets, show_secrets);
+        extract_endpoints(&body, &js, &mut out.endpoints);
+        scan_secrets(&body, &js, &mut out.secrets, show_secrets);
     }
 
     out

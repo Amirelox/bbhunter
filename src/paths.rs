@@ -304,9 +304,26 @@ pub async fn run(http: &Http, base: &str, scope: &Scope, extra: &[String]) -> Pa
         return scan;
     }
 
-    for &path in CHECKS {
-        let url = format!("{}{}", base.trim_end_matches('/'), path);
-        let Ok(f) = http.fetch(&url, &[], 400_000).await else {
+    let mut paths: Vec<String> = CHECKS.iter().map(|p| (*p).to_string()).collect();
+    for path in extra.iter().filter(|p| p.starts_with('/')).take(40) {
+        if !paths.iter().any(|p| p == path) {
+            paths.push(path.clone());
+        }
+    }
+
+    let results: Vec<(String, anyhow::Result<crate::http::Fetched>)> =
+        stream::iter(paths.into_iter())
+            .map(|path| async move {
+                let url = format!("{}{}", base.trim_end_matches('/'), path);
+                let result = http.fetch(&url, &[], 300_000).await;
+                (path, result)
+            })
+            .buffer_unordered(4)
+            .collect()
+            .await;
+
+    for (path, result) in results {
+        let Ok(f) = result else {
             continue;
         };
         scan.checked += 1;
@@ -341,14 +358,14 @@ pub async fn run(http: &Http, base: &str, scope: &Scope, extra: &[String]) -> Pa
                     "directory-listing",
                     &host,
                     &f.final_url,
-                    format!("Włączone listowanie katalogu: {path}"),
-                    "Strona indeksu listuje pliki; może ujawnić kopie zapasowe.",
+                    format!("Directory listing enabled at {path}"),
+                    "Index page lists files; may expose backups or unrelated assets.",
                 );
                 continue;
             }
         }
 
-        if let Some((severity, category, title)) = classify(path, &f) {
+        if let Some((severity, category, title)) = classify(&path, &f) {
             scan.hits += 1;
             scan.findings.add(
                 severity,
@@ -358,41 +375,33 @@ pub async fn run(http: &Http, base: &str, scope: &Scope, extra: &[String]) -> Pa
                 title.to_string(),
                 format!("HTTP {} · {} B", f.status, f.body_len),
             );
+            continue;
         }
-    }
 
-    // Own rules: plain paths from settings, no content validation beyond a soft-404 guard.
-    let mut seen_extra: BTreeSet<&str> = BTreeSet::new();
-    for path in extra.iter().filter(|p| p.starts_with('/')).take(40) {
-        if CHECKS.contains(&path.as_str()) || !seen_extra.insert(path.as_str()) {
-            continue;
+        // Custom paths: existence only, no content classification.
+        if !CHECKS.contains(&path.as_str()) {
+            let ok = (200..300).contains(&f.status);
+            let protected = f.status == 401 || f.status == 403;
+            if !ok && !protected {
+                continue;
+            }
+            let lower = f.body.to_ascii_lowercase();
+            if ok && (lower.contains("not found") || lower.contains("nie znaleziono")) {
+                continue;
+            }
+            scan.hits += 1;
+            scan.findings.add(
+                Severity::Info,
+                "custom-rule",
+                &host,
+                &f.final_url,
+                format!("Własna ścieżka odpowiada: {path}"),
+                format!(
+                    "HTTP {} · reguła użytkownika, bez walidacji treści",
+                    f.status
+                ),
+            );
         }
-        let url = format!("{}{}", base.trim_end_matches('/'), path);
-        let Ok(f) = http.fetch(&url, &[], 300_000).await else {
-            continue;
-        };
-        scan.checked += 1;
-        let ok = (200..300).contains(&f.status);
-        let protected = f.status == 401 || f.status == 403;
-        if !ok && !protected {
-            continue;
-        }
-        let lower = f.body.to_ascii_lowercase();
-        if ok && (lower.contains("not found") || lower.contains("nie znaleziono")) {
-            continue;
-        }
-        scan.hits += 1;
-        scan.findings.add(
-            Severity::Info,
-            "custom-rule",
-            &host,
-            &f.final_url,
-            format!("Własna ścieżka odpowiada: {path}"),
-            format!(
-                "HTTP {} · reguła użytkownika, bez walidacji treści",
-                f.status
-            ),
-        );
     }
 
     scan

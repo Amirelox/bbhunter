@@ -25,7 +25,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use cli::{Cli, Cmd, PathsArgs, ReconArgs, SubsArgs, TargetArgs};
+use cli::{Cli, Cmd, PathsArgs, Profile, ReconArgs, SubsArgs, TargetArgs};
 use crawl::CrawlResult;
 use dnsx::Resolver;
 use findings::{Findings, Stage};
@@ -72,16 +72,59 @@ async fn run(cli: Cli) -> Result<()> {
     let Cli {
         scope,
         no_scope_check,
-        concurrency,
-        rate,
-        timeout,
+        mut concurrency,
+        mut rate,
+        mut timeout,
         out,
         show_secrets,
         quiet: _,
         proxy,
         header,
-        cmd,
+        mut cmd,
     } = cli;
+
+    if let Cmd::Recon(args) = &mut cmd {
+        match args.profile {
+            Profile::Fast => {
+                if rate == 25 {
+                    rate = 100;
+                }
+                if concurrency == 20 {
+                    concurrency = 64;
+                }
+                if timeout == 10 {
+                    timeout = 6;
+                }
+                if args.max_pages == 30 {
+                    args.max_pages = 10;
+                }
+                if args.crawl_hosts == 40 {
+                    args.crawl_hosts = 20;
+                }
+                if args.paths_hosts == 25 {
+                    args.paths_hosts = 12;
+                }
+                if args.depth == 2 {
+                    args.depth = 1;
+                }
+            }
+            Profile::Deep => {
+                if args.max_pages == 30 {
+                    args.max_pages = 60;
+                }
+                if args.crawl_hosts == 40 {
+                    args.crawl_hosts = 80;
+                }
+                if args.paths_hosts == 25 {
+                    args.paths_hosts = 40;
+                }
+                if args.depth == 2 {
+                    args.depth = 3;
+                }
+            }
+            Profile::Balanced => {}
+        }
+    }
 
     // `serve` takes the scope from each scan request, so it must not require a CLI file.
     let serving = matches!(cmd, Cmd::Serve(_));

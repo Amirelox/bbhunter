@@ -496,6 +496,7 @@ async fn start_scan(State(app): State<Arc<App>>, Json(req): Json<ScanReq>) -> Re
         max_hosts: req.max_hosts.unwrap_or(settings.max_hosts).clamp(1, 5000),
         depth: req.depth.unwrap_or(settings.depth).clamp(0, 5),
         no_osint: !(req.osint && settings.osint),
+        profile: crate::cli::Profile::Balanced,
     };
     let extra_paths = settings.extra_paths.clone();
 

@@ -44,12 +44,23 @@ bbhunter serve --port 8080        # → http://127.0.0.1:8080
 # full pipeline from the terminal
 bbhunter recon -d example.com --scope scope.txt --brute --wayback -o ./out
 
+# quick pass (higher rate, shallow crawl)
+bbhunter recon -d example.com --scope scope.txt --profile fast
+
 # single stages
 bbhunter subs  -d example.com --scope scope.txt > subs.txt
 bbhunter probe -l subs.txt --scope scope.txt
 bbhunter crawl -l live_hosts.txt --scope scope.txt --max-pages 50
 bbhunter paths -u https://example.com --scope scope.txt --limit 20
 bbhunter urls  -d example.com --scope scope.txt > wayback.txt
+```
+
+Speed profiles: `--profile fast` (100 req/s, 64 workers, 10 pages, depth 1), `balanced` (the
+defaults), `deep` (80 pages, depth 3). Explicit non-default flags win. Every run ends with a
+per-stage timing line:
+
+```
+czasy: OSINT 1.2s · DNS 0.4s · probe 8.1s · crawl 24.0s · paths 6.3s · enrich 2.0s · razem 42.0s
 ```
 
 Global flags: `--concurrency` (20), `--rate` req/s (25), `--timeout` (10 s), `-o/--out`, `-q`,
@@ -75,6 +86,11 @@ bbhunter recon -d example.com --scope scope.txt \
 | 6. Triage | `triage.rs` | buckets: admin-panels, debug-staging, auth-endpoints, api-endpoints, payment-checkout, file-upload, redirect-params, urls-with-params, user-account |
 | 7. Recursion | `pipeline.rs` | A host found in a link, JS file, robots/sitemap or redirect joins the next round and goes through the same stages. Bounded by `--depth` (2), `--max-hosts` (500); `--no-recurse` disables it |
 | 8. Report | `report.rs` | `report.md`, `report.html`, `findings.json`, `hosts.jsonl`, per-bucket files |
+
+Performance notes: pages inside a site are fetched in parallel batches, path checks run four at a
+time per host, passive sources are concurrent and cached for 24 h, aliases are crawled once, and
+OSINT enrichment (ASN/favicons) is parallel. Body reads are capped (512 KB for probe, 1 MB for
+pages and JS).
 
 Crawl and path checks **prioritise** dev/staging/admin/api hosts, and `--paths-hosts` /
 `--crawl-hosts` cap the expensive work per round.

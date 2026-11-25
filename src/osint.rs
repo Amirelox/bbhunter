@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use base64::Engine;
+use futures::stream::{self, StreamExt};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -155,10 +156,18 @@ async fn common_crawl(http: &Http, domain: &str) -> (Vec<String>, Option<String>
         .await
     {
         Ok(b) => b,
-        Err(_) => return (Vec::new(), Some("Common Crawl: indeks niedostępny".to_string())),
+        Err(_) => {
+            return (
+                Vec::new(),
+                Some("Common Crawl: indeks niedostępny".to_string()),
+            )
+        }
     };
     let Ok(v) = serde_json::from_str::<Value>(&body) else {
-        return (Vec::new(), Some("Common Crawl: niepoprawny collinfo".to_string()));
+        return (
+            Vec::new(),
+            Some("Common Crawl: niepoprawny collinfo".to_string()),
+        );
     };
     let ids: Vec<String> = v
         .as_array()
@@ -170,7 +179,10 @@ async fn common_crawl(http: &Http, domain: &str) -> (Vec<String>, Option<String>
         })
         .unwrap_or_default();
     if ids.is_empty() {
-        return (Vec::new(), Some("Common Crawl: brak identyfikatora indeksu".to_string()));
+        return (
+            Vec::new(),
+            Some("Common Crawl: brak identyfikatora indeksu".to_string()),
+        );
     }
 
     let mut last_note = None;
@@ -1139,13 +1151,23 @@ pub async fn pre(
         log::stage("Kandydaci nazw w chmurze (S3 / GCS / Azure)");
         let names = cloud_candidates(domain);
         let apex = util::registrable(domain);
-        for name in &names {
-            let hits = cloud_check(http, name, &apex).await;
+        let checked: Vec<Vec<CloudHit>> = stream::iter(names.iter().cloned())
+            .map(|name| {
+                let apex = apex.clone();
+                async move { cloud_check(http, &name, &apex).await }
+            })
+            .buffer_unordered(4)
+            .collect()
+            .await;
+        for hits in checked {
             for hit in hits {
                 log::ok(&format!("{}: {} ({})", hit.provider, hit.name, hit.kind));
                 report.cloud.push(hit);
             }
         }
+        report
+            .cloud
+            .sort_by(|a, b| a.provider.cmp(b.provider).then(a.name.cmp(&b.name)));
         log::ok(&format!(
             "{} kandydatów, {} istniejących nazw",
             names.len(),
@@ -1210,17 +1232,34 @@ pub async fn enrich(
 
     let mut ips: BTreeSet<String> = BTreeSet::new();
     let mut host_ips: Vec<(String, String)> = Vec::new();
-    for host in hosts.iter().take(80) {
-        let bare = util::normalize_host(host).unwrap_or_else(|| host.clone());
-        let resolved = resolver.resolve(&bare).await;
-        if let Some(ip) = resolved.ips.first() {
+    let resolved: Vec<(String, Vec<String>)> = stream::iter(hosts.iter().take(80).cloned())
+        .map(|host| async move {
+            let bare = util::normalize_host(&host).unwrap_or_else(|| host.clone());
+            let info = resolver.resolve(&bare).await;
+            (host, info.ips)
+        })
+        .buffer_unordered(16)
+        .collect()
+        .await;
+    for (host, host_resolved) in resolved {
+        if let Some(ip) = host_resolved.first() {
             ips.insert(ip.clone());
-            host_ips.push((host.clone(), ip.clone()));
+            host_ips.push((host, ip.clone()));
         }
     }
 
-    for ip in ips.iter().take(40) {
-        if let Some(info) = asn_lookup(http, ip).await {
+    let ip_list: Vec<String> = ips.iter().take(40).cloned().collect();
+    let lookups: Vec<(String, Option<AsnInfo>, Option<ShodanHost>)> = stream::iter(ip_list)
+        .map(|ip| async move {
+            let asn = asn_lookup(http, &ip).await;
+            let shodan = internetdb(http, &ip).await;
+            (ip, asn, shodan)
+        })
+        .buffer_unordered(6)
+        .collect()
+        .await;
+    for (_, info, shodan) in lookups {
+        if let Some(info) = info {
             for prefix in &info.prefixes {
                 if !report.prefixes.contains(prefix) {
                     report.prefixes.push(prefix.clone());
@@ -1228,7 +1267,7 @@ pub async fn enrich(
             }
             report.asn.push(info);
         }
-        if let Some(host) = internetdb(http, ip).await {
+        if let Some(host) = shodan {
             report.shodan.push(host);
         }
     }
@@ -1259,10 +1298,22 @@ pub async fn enrich(
         log::stage("Favicon hash (wszystkie żywe hosty)");
         let key = std::env::var("SHODAN_API_KEY").ok();
         let mut groups: BTreeMap<i64, Vec<String>> = BTreeMap::new();
-        for host in hosts.iter().take(opts.favicon_hosts.max(1)) {
-            if let Some(hash) = fetch_favicon(http, host).await {
-                groups.entry(hash).or_default().push(host.clone());
+        let icons: Vec<(String, Option<i64>)> =
+            stream::iter(hosts.iter().take(opts.favicon_hosts.max(1)).cloned())
+                .map(|host| async move {
+                    let hash = fetch_favicon(http, &host).await;
+                    (host, hash)
+                })
+                .buffer_unordered(8)
+                .collect()
+                .await;
+        for (host, hash) in icons {
+            if let Some(hash) = hash {
+                groups.entry(hash).or_default().push(host);
             }
+        }
+        for hosts in groups.values_mut() {
+            hosts.sort();
         }
         let mut searched = 0;
         for (hash, group_hosts) in groups {

@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use crate::cli::ReconArgs;
 use crate::crawl;
@@ -63,6 +64,13 @@ pub async fn recon(
     extra_paths: &[String],
 ) -> Result<PathBuf> {
     let started = now();
+    let total_start = Instant::now();
+    let mut t_osint = Duration::ZERO;
+    let mut t_dns = Duration::ZERO;
+    let mut t_probe = Duration::ZERO;
+    let mut t_crawl = Duration::ZERO;
+    let mut t_paths = Duration::ZERO;
+    let mut t_enrich = Duration::ZERO;
     let inputs = args.targets.hosts(scope)?;
     let roots: BTreeSet<String> = inputs
         .iter()
@@ -95,6 +103,7 @@ pub async fn recon(
     if cancel.load(Ordering::Relaxed) {
         cancelled = true;
     }
+    let stage_start = Instant::now();
     if !args.no_osint && !cancelled {
         log::stage("OSINT pre-scan (extra passive sources, RDAP, cloud, dorks)");
         for root in &roots {
@@ -113,7 +122,10 @@ pub async fn recon(
         }
     }
 
+    t_osint += stage_start.elapsed();
+
     // 1. Passive enumeration becomes the first frontier.
+    let stage_start = Instant::now();
     let enumerable: Vec<String> = roots
         .iter()
         .filter(|r| !util::is_ip(r) && r.as_str() != "localhost")
@@ -138,6 +150,8 @@ pub async fn recon(
         }
     }
     known.extend(inputs.iter().cloned());
+
+    t_dns += stage_start.elapsed();
 
     // 2. Historical URLs are collected once and also seed the frontier.
     let mut wayback_urls: BTreeSet<String> = BTreeSet::new();
@@ -204,7 +218,9 @@ pub async fn recon(
         ));
 
         // 3. Probe every host in the batch.
+        let stage_start = Instant::now();
         let mut outcome = probe::probe(http, resolver, &batch, concurrency).await;
+        t_probe += stage_start.elapsed();
         findings.merge(std::mem::take(&mut outcome.findings));
         for h in &outcome.hosts {
             triage.add_host(&h.host);
@@ -234,7 +250,10 @@ pub async fn recon(
         let live: Vec<String> = outcome
             .hosts
             .iter()
-            .filter(|h| h.status > 0 && h.alias_of.is_none())
+            .filter(|h| {
+                h.alias_of.is_none()
+                    && ((200..400).contains(&h.status) || h.status == 401 || h.status == 403)
+            })
             .map(|h| h.host.clone())
             .collect();
 
@@ -250,6 +269,7 @@ pub async fn recon(
             .iter()
             .filter_map(|h| bases.get(h).cloned())
             .collect();
+        let stage_start = Instant::now();
         let crawl = crawl::crawl_many(
             http,
             &crawl_targets,
@@ -259,8 +279,10 @@ pub async fn recon(
             scope,
         )
         .await;
+        t_crawl += stage_start.elapsed();
 
         // 5. Low-hanging checks on this batch.
+        let stage_start = Instant::now();
         let mut paths = if args.skip_paths {
             PathScan::default()
         } else {
@@ -271,6 +293,7 @@ pub async fn recon(
                 .collect();
             paths::run_many(http, &picked_bases, concurrency, scope, extra_paths).await
         };
+        t_paths += stage_start.elapsed();
         findings.merge(std::mem::take(&mut paths.findings));
 
         // 6. Crawl-derived findings.
@@ -358,6 +381,7 @@ pub async fn recon(
         .map(|h| h.host.clone())
         .collect();
     let mut osint_final: Option<osint::OsintReport> = None;
+    let enrich_start = Instant::now();
     for (root, mut rep) in osint_reports {
         if let Err(e) = osint::enrich(
             http,
@@ -387,6 +411,8 @@ pub async fn recon(
         ));
         osint_final = Some(rep);
     }
+
+    t_enrich += enrich_start.elapsed();
 
     // 9. Report
     let mut notes: Vec<String> = Vec::new();
@@ -459,14 +485,31 @@ pub async fn recon(
         notes: &notes,
         osint: osint_final.as_ref(),
     };
+    let report_start = Instant::now();
     report::write_all(&dir, &data)?;
+    let t_report = report_start.elapsed();
 
     log::ok(&format!(
         "gotowe: {} hostów, {} ustaleń",
-        hosts.len(),
+        primary_hosts(&hosts).len(),
         findings.len()
     ));
+    log::ok(&format!(
+        "czasy: OSINT {:.1}s · DNS {:.1}s · probe {:.1}s · crawl {:.1}s · paths {:.1}s · enrich {:.1}s · raport {:.1}s · razem {:.1}s",
+        t_osint.as_secs_f64(),
+        t_dns.as_secs_f64(),
+        t_probe.as_secs_f64(),
+        t_crawl.as_secs_f64(),
+        t_paths.as_secs_f64(),
+        t_enrich.as_secs_f64(),
+        t_report.as_secs_f64(),
+        total_start.elapsed().as_secs_f64(),
+    ));
     Ok(dir)
+}
+
+fn primary_hosts(hosts: &[HostResult]) -> Vec<&HostResult> {
+    hosts.iter().filter(|h| h.alias_of.is_none()).collect()
 }
 
 fn now() -> String {

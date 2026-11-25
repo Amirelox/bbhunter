@@ -653,6 +653,14 @@
     return `<div class="grid-2">
       <section class="panel"><div class="panel__head"><h2>Limity</h2></div>
         <form id="settings-form">
+          <div class="field" style="margin-block-end:var(--space-3)"><label for="st-profile">Profil szybkości</label>
+            <select id="st-profile">
+              <option value="">własny</option>
+              <option value="fast">szybki — 100 req/s, 10 stron, głębokość 1</option>
+              <option value="balanced">zbalansowany — 25 req/s, 30 stron, głębokość 2</option>
+              <option value="deep">głęboki — 20 req/s, 80 stron, głębokość 3</option>
+            </select>
+            <p class="hint">Wypełnia limity; zapisz przyciskiem. Profil nie omija zakresu.</p></div>
           <div class="form-grid">
             <div class="field"><label for="st-rate">Req/s</label><input id="st-rate" type="number" min="1" max="500" value="${s.rate ?? 25}"></div>
             <div class="field"><label for="st-conc">Współbieżność</label><input id="st-conc" type="number" min="1" max="200" value="${s.concurrency ?? 20}"></div>
@@ -958,6 +966,20 @@
         fillOsint();
       } else if (t.id === "l-run" || t.id === "l-live") {
         fillLogs();
+      } else if (t.id === "st-profile") {
+        const presets = {
+          fast: { rate: 100, conc: 64, timeout: 6, pages: 10, hosts: 500, depth: 1 },
+          balanced: { rate: 25, conc: 20, timeout: 10, pages: 30, hosts: 500, depth: 2 },
+          deep: { rate: 20, conc: 24, timeout: 15, pages: 80, hosts: 1000, depth: 3 },
+        };
+        const p = presets[t.value];
+        if (!p) return;
+        $("#st-rate").value = p.rate;
+        $("#st-conc").value = p.conc;
+        $("#st-timeout").value = p.timeout;
+        $("#st-pages").value = p.pages;
+        $("#st-hosts").value = p.hosts;
+        $("#st-depth").value = p.depth;
       } else if (t.id === "s-import" && t.files && t.files[0]) {
         const text = await t.files[0].text();
         $("#s-rules").value = text.trim();

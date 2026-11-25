@@ -98,7 +98,7 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
     let mut last_err = String::new();
     let mut fetched: Option<(String, Fetched)> = None;
     for url in [format!("https://{host}"), format!("http://{host}")] {
-        match http.fetch(&url, &origin_header, 1_000_000).await {
+        match http.fetch(&url, &origin_header, 512_000).await {
             Ok(f) => {
                 fetched = Some((url, f));
                 break;

@@ -16,10 +16,10 @@ impl Resolver {
     pub fn new() -> Self {
         // System resolvers by default, with a small cache.
         let mut opts = ResolverOpts::default();
-        opts.cache_size = 4096;
+        opts.cache_size = 8192;
         opts.timeout = std::time::Duration::from_secs(3);
         opts.attempts = 2;
-        opts.num_concurrent_reqs = 16;
+        opts.num_concurrent_reqs = 48;
         Self {
             inner: TokioAsyncResolver::tokio(ResolverConfig::default(), opts),
         }

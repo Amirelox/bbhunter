@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -261,6 +261,16 @@ pub struct PathsArgs {
     pub limit: usize,
 }
 
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Profile {
+    /// High rate, shallow crawl, no deep recursion.
+    Fast,
+    /// Current defaults.
+    Balanced,
+    /// More pages and depth, same polite rate.
+    Deep,
+}
+
 #[derive(Args, Debug)]
 pub struct ReconArgs {
     #[command(flatten)]
@@ -309,4 +319,8 @@ pub struct ReconArgs {
     /// Skip the OSINT stage (it runs by default).
     #[arg(long = "no-osint")]
     pub no_osint: bool,
+
+    /// Speed profile; explicit non-default flags win.
+    #[arg(long, value_enum, default_value_t = Profile::Balanced)]
+    pub profile: Profile,
 }
