@@ -35,6 +35,24 @@
     });
   }
 
+  // --- fit the live report preview to its frame --------------------------
+  const reportBody = document.querySelector(".frame__body");
+  const reportFrame = reportBody && reportBody.querySelector("iframe");
+  const fitReport = () => {
+    if (!reportBody || !reportFrame) return;
+    const virtual = window.innerWidth <= 640 ? 720 : 1440;
+    const scale = reportBody.clientWidth / virtual;
+    reportFrame.style.width = `${virtual}px`;
+    reportFrame.style.height = "900px";
+    reportFrame.style.transform = `scale(${scale})`;
+    reportBody.style.height = `${Math.round(900 * scale)}px`;
+  };
+  if (reportBody && reportFrame) {
+    fitReport();
+    window.addEventListener("resize", fitReport);
+    reportFrame.addEventListener("load", fitReport, { once: true });
+  }
+
   // --- one hero moment: the scan runs once -------------------------------
   const app = document.getElementById("console");
   if (!app || reduce) return;

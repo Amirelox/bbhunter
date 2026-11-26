@@ -1,56 +1,75 @@
 /* =========================================================================
-   bbhunter — tokeny
-   Jedyne miejsce, w którym wolno dodawać wartości. Komponenty (report.css)
-   używają wyłącznie tokenów semantycznych, nigdy primitywów ani hexów.
-
-   Notacja: hex. Powód: raport jest jednym plikiem HTML bez builda, a hex jest
-   jedynym formatem, który czyta każdy podgląd i każdy diff. Rampę policzono
-   w OKLCH (patrz design/foundations.md), wynik zapisano w sRGB.
+   bbhunter — tokeny raportu
+   Papier + atrament + sygnałowa limonka. Raport jest dokumentem, nie kokpitem;
+   dlatego ciemna okładka otwiera jasną stronę, a kolor nigdy nie niesie
+   znaczenia sam — zawsze towarzyszy mu słowo albo liczba.
    ========================================================================= */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* --- primitywy: neutralny, ciepły grafit (hue 84–92° w OKLCH) --------- */
-  --graphite-950: #171614; /* tło strony */
-  --graphite-900: #1d1c19; /* panel */
-  --graphite-800: #262420; /* podniesione: hover wiersza */
-  --paper-100: #efe9de; /* tekst główny */
-  --paper-300: #a9a29a; /* tekst wtórny */
-  --paper-500: #948e84; /* meta */
+  /* --- papier i atrament -------------------------------------------------- */
+  --paper-50: #fbf8f0;
+  --paper-100: #f2efe5;
+  --paper-200: #e9e4d7;
+  --ink-950: #171a15;
+  --ink-800: #2b3028;
+  --ink-600: #4f584a;
+  --ink-500: #626c5d;
 
-  /* --- primitywy: akcent, miedź (OKLCH H 55.3°) ------------------------- */
-  --copper-400: #cf8b5b;
+  /* --- okładka ------------------------------------------------------------ */
+  --cover-950: #10130e;
+  --cover-900: #151a13;
+  --cover-text: #edf3e7;
+  --cover-muted: #99a690;
+  --cover-line: color-mix(in srgb, var(--cover-text) 16%, transparent);
 
-  /* --- primitywy: waga ustalenia (H 28.6° / 86.9° / 243.7°) ------------- */
-  --vermillion-400: #e8786b;
-  --ochre-300: #d8b45e;
-  --slate-400: #8aa3b8;
+  /* --- sygnał ------------------------------------------------------------- */
+  --signal-400: #c8f36a; /* tylko tło, pasek, znacznik */
+  --signal-700: #4b6600; /* tekst i linki na papierze */
 
-  /* --- semantyczne: powierzchnie ---------------------------------------- */
-  --color-bg: var(--graphite-950);
-  --color-surface: var(--graphite-900);
-  --color-raised: var(--graphite-800);
-  --color-line: color-mix(in srgb, var(--paper-100) 9%, transparent);
-  --color-line-strong: color-mix(in srgb, var(--paper-100) 16%, transparent);
+  /* --- waga ustalenia (na papierze) --------------------------------------- */
+  --vermillion-700: #a52a22;
+  --ochre-700: #7a5200;
+  --slate-700: #2f5d76;
+  --gray-600: #5f695b;
 
-  /* --- semantyczne: tekst (3 role) -------------------------------------- */
-  --color-text: var(--paper-100); /* 14.10:1 na surface */
-  --color-text-secondary: var(--paper-300); /* 6.75:1 */
-  --color-text-muted: var(--paper-500); /* 4.96:1 — tylko meta */
+  /* --- semantyczne: powierzchnie ----------------------------------------- */
+  --color-bg: var(--paper-100);
+  --color-surface: var(--paper-50);
+  --color-raised: var(--paper-200);
+  --color-line: color-mix(in srgb, var(--ink-950) 12%, transparent);
+  --color-line-strong: color-mix(in srgb, var(--ink-950) 24%, transparent);
 
-  /* --- semantyczne: akcja i uwaga --------------------------------------- */
-  --color-accent: var(--copper-400); /* 6.08:1 na surface */
-  --color-on-accent: var(--graphite-950); /* 6.46:1 na akcencie */
-  --color-focus: var(--copper-400);
+  /* --- semantyczne: tekst ------------------------------------------------- */
+  --color-text: var(--ink-950);
+  --color-text-secondary: var(--ink-600);
+  --color-text-muted: var(--ink-500);
 
-  /* --- semantyczne: waga ustalenia (kolor wzmacnia, nigdy nie niesie sam) */
-  --color-sev-high: var(--vermillion-400); /* 5.95:1 */
-  --color-sev-medium: var(--ochre-300); /* 8.61:1 */
-  --color-sev-low: var(--slate-400); /* 6.50:1 */
-  --color-sev-info: var(--paper-500); /* 4.96:1 */
+  /* --- semantyczne: akcja, fokus, sygnał ---------------------------------- */
+  --color-accent: var(--signal-700);
+  --color-on-accent: var(--paper-50);
+  --color-focus: var(--signal-700);
+  --color-signal: var(--signal-400);
+  --color-on-signal: var(--cover-950);
 
-  /* --- odstępy: siatka 4 px --------------------------------------------- */
+  /* --- semantyczne: okładka ----------------------------------------------- */
+  --color-cover: var(--cover-900);
+  --color-cover-text: var(--cover-text);
+  --color-cover-muted: var(--cover-muted);
+  --color-cover-line: var(--cover-line);
+  --color-cover-sev-high: #ff8a7d;
+  --color-cover-sev-medium: #f0c06a;
+  --color-cover-sev-low: #8fcbe6;
+  --color-cover-sev-info: #b7c3b0;
+
+  /* --- semantyczne: waga ustalenia ---------------------------------------- */
+  --color-sev-high: var(--vermillion-700);
+  --color-sev-medium: var(--ochre-700);
+  --color-sev-low: var(--slate-700);
+  --color-sev-info: var(--gray-600);
+
+  /* --- odstępy: siatka 4 px ----------------------------------------------- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -62,42 +81,36 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* --- promienie: panele są płaskie, zaokrąglenie tylko na znacznikach --- */
-  --radius-1: 2px; /* znacznik severity, obwódka focusu */
+  /* --- promienie: papier jest płaski -------------------------------------- */
+  --radius-1: 2px;
 
-  /* --- typografia -------------------------------------------------------- */
+  /* --- typografia --------------------------------------------------------- */
   --font-ui: "Instrument Sans", ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
     monospace;
 
-  --size-12: 0.75rem; /* 12 px — dolna granica */
-  --size-13: 0.8125rem; /* 13 px */
-  --size-14: 0.875rem; /* 14 px */
-  --size-20: 1.25rem; /* 20 px */
-  --size-30: 1.875rem; /* 30 px */
-  --size-44: 2.75rem; /* 44 px */
+  --size-12: 0.75rem;
+  --size-13: 0.8125rem;
+  --size-14: 0.875rem;
+  --size-20: 1.25rem;
+  --size-30: 1.875rem;
+  --size-44: 2.75rem;
 
-  --lh-tight: 1.1; /* tylko liczby i tytuł strony */
-  --lh-heading: 1.25;
-  --lh-body: 1.5;
+  --lh-tight: 1.08;
+  --lh-heading: 1.22;
+  --lh-body: 1.55;
   --lh-meta: 1.4;
 
-  --tracking-display: -0.02em; /* tylko ≥ 24 px */
+  --tracking-display: -0.025em;
   --tracking-flat: 0;
 
-  /* --- układ ------------------------------------------------------------- */
+  /* --- układ -------------------------------------------------------------- */
   --page-max: 1180px;
-  --gutter: 32px;
-  --rail: 300px;
-  --col-gap: 48px;
-  --measure: 68ch; /* 60–75 znaków */
-
-  /* --- ruch -------------------------------------------------------------- */
-  --dur-1: 120ms; /* hover, focus, zmiana stanu */
+  --gutter: 36px;
+  --rail: 280px;
+  --col-gap: 56px;
+  --measure: 68ch;
+  --dur-1: 120ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
-
-  /* Breakpointy (media queries nie czytają var — wartości wpisane w report.css):
-     960 px — szyna schodzi pod treść, 640 px — tabele zamieniają się w bloki,
-     320 px — minimalna szerokość, 200% zoom przy 1440 px daje 720 px CSS. */
 }

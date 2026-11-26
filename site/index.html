@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070a08">
 <title>bbhunter — rekonesans, który kończy się raportem</title>
 <meta name="description" content="Cztery etapy rekonesansu w jednym binarnym pliku: subdomeny, probe, crawl i well-known ścieżki. Raport HTML offline, OSINT i zakres wymuszany przed każdym requestem.">
 <meta name="page-type" content="software">
@@ -11,7 +12,7 @@
 <meta property="og:title" content="bbhunter — rekonesans, który kończy się raportem">
 <meta property="og:description" content="Subdomeny, probe, crawl i ścieżki w jednym przebiegu. Raport offline, OSINT, twarda allowlista.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230c0e11'/%3E%3Crect x='7' y='6' width='3' height='20' fill='%23d29563'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23070a08'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23c8f36a'/%3E%3Crect x='13' y='13' width='6' height='6' fill='%23c8f36a'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../design/fonts.css">
 <link rel="stylesheet" href="site.css">
 <script>document.documentElement.classList.add("js");</script>
@@ -21,7 +22,7 @@
 
 <header class="nav">
   <div class="wrap nav__inner">
-    <a class="brand" href="#top"><span class="brand__tick" aria-hidden="true"></span>bbhunter</a>
+    <a class="brand" href="#top"><span class="brand__mark" aria-hidden="true"></span>bbhunter</a>
     <nav id="menu" class="nav__links" aria-label="Główna">
       <a href="#jak">Jak działa</a>
       <a href="#raport">Raport</a>
@@ -139,7 +140,7 @@
     <div class="wrap report">
       <div class="report__copy">
         <h2>Raport,<br>który się czyta</h2>
-        <p class="section__intro">Ustalenia posortowane po wadze, hosty, endpointy i leady. Jeden HTML, który otwiera się bez internetu — obok JSON i pliki do dalszej pracy.</p>
+        <p class="section__intro">Ustalenia posortowane po wadze, hosty, endpointy i leady. Jeden HTML, który otwiera się bez internetu i drukuje się do PDF — obok JSON i pliki do dalszej pracy.</p>
         <ul class="plain">
           <li><b>Waga na brzegu wiersza</b><span>3 px i słowna etykieta; kolor nie jest jedynym nośnikiem znaczenia.</span></li>
           <li><b>Ślad pokrycia</b><span>Cztery stacje pokazują, co uruchomiono i ile z tego wyszło.</span></li>
@@ -151,10 +152,10 @@
       <div class="frame">
         <div class="frame__bar">
           <span class="mono">report.html</span>
-          <span class="mono muted">127.0.0.1 · 1440 px</span>
+          <span class="mono muted">offline · gotowy do druku</span>
         </div>
         <div class="frame__body">
-          <iframe src="assets/przyklad-raportu.html" title="Przykładowy raport bbhunter" tabindex="-1" aria-hidden="true"></iframe>
+          <iframe src="assets/przyklad-raportu.html?v=6" title="Przykładowy raport bbhunter" tabindex="-1" aria-hidden="true"></iframe>
         </div>
       </div>
     </div>
@@ -293,6 +294,6 @@ bbhunter recon -d example.com --scope scope.txt</pre>
   </div>
 </footer>
 
-<script src="site.js?v=2"></script>
+<script src="site.js?v=3"></script>
 </body>
 </html>

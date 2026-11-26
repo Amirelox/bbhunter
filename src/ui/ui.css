@@ -1,6 +1,7 @@
 /* =========================================================================
    bbhunter — aplikacja
-   Ciemny navy, cobalt, gęste dane. Powierzchnia robocza na godziny.
+   Atrament z zielonym podtonem, sygnałowa limonka, gęste dane.
+   Powierzchnia robocza na godziny.
    ========================================================================= */
 
 *,
@@ -16,27 +17,27 @@
 :root {
   color-scheme: dark;
 
-  --bg: #070b11;
-  --bg-deep: #05080d;
-  --surface: #0b121b;
-  --surface-2: #0f1722;
-  --surface-3: #14202d;
-  --line: rgba(154, 182, 209, 0.11);
-  --line-strong: rgba(154, 182, 209, 0.2);
+  --bg: #070a09;
+  --bg-deep: #040605;
+  --surface: #0b100d;
+  --surface-2: #0f1511;
+  --surface-3: #131c16;
+  --line: rgba(226, 240, 218, 0.11);
+  --line-strong: rgba(226, 240, 218, 0.2);
 
-  --ink: #eaf1f8;
-  --text: #bac8d7;
-  --muted: #8a9bae;
-  --faint: #6b7b8d;
+  --ink: #edf3e6;
+  --text: #b8c4b2;
+  --muted: #8c9988;
+  --faint: #748271;
 
-  --accent: #5b8cff;
-  --accent-soft: #7ba5ff;
-  --accent-ink: #06101d;
-  --success: #3dd6b0;
-  --high: #ff7070;
-  --medium: #e8b35f;
-  --low: #6fb3d9;
-  --info: #8d9aad;
+  --accent: #c8f36a;
+  --accent-soft: #dcff8f;
+  --accent-ink: #101604;
+  --success: #79d9a3;
+  --high: #ff7b6b;
+  --medium: #e8b45c;
+  --low: #7fb9d6;
+  --info: #96a594;
 
   --radius: 6px;
   --radius-sm: 4px;
@@ -52,7 +53,6 @@ html {
 
 body {
   margin: 0;
-  min-width: 320px;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
@@ -65,6 +65,16 @@ body {
 ::selection {
   background: var(--accent);
   color: var(--accent-ink);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 80;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
 }
 
 h1,
@@ -476,13 +486,13 @@ h1 {
 }
 
 .pill[data-state="running"] {
-  border-color: rgba(61, 214, 176, 0.35);
-  background: rgba(61, 214, 176, 0.07);
+  border-color: rgba(200, 243, 106, 0.4);
+  background: rgba(200, 243, 106, 0.07);
   color: var(--ink);
 }
 
 .pill[data-state="running"] .pill__dot {
-  background: var(--success);
+  background: var(--accent);
   animation: statusPulse 1.8s var(--ease) infinite;
 }
 
@@ -711,6 +721,13 @@ h1 {
   text-overflow: ellipsis;
 }
 
+.kpi__period {
+  margin-inline-start: 4px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
 .kpi__icon {
   width: 16px;
   height: 16px;
@@ -855,7 +872,7 @@ h1 {
 }
 
 .chart__col:hover {
-  background: rgba(154, 182, 209, 0.04);
+  background: rgba(226, 240, 218, 0.04);
 }
 
 .chart__total {
@@ -1146,8 +1163,8 @@ h1 {
 }
 
 .status[data-status="nowe"] {
-  border-color: rgba(91, 140, 255, 0.28);
-  color: var(--accent-soft);
+  border-color: var(--line-strong);
+  color: var(--text);
 }
 
 .status[data-status="zweryfikowane"] {
@@ -1211,7 +1228,7 @@ h1 {
 }
 
 .mini-table tr:hover td {
-  background: rgba(154, 182, 209, 0.025);
+  background: rgba(226, 240, 218, 0.025);
 }
 
 .mini-table a {
@@ -1432,6 +1449,10 @@ h1 {
   flex: 1 1 240px;
 }
 
+.field--wide {
+  min-width: 280px;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -1550,7 +1571,7 @@ table.table {
 }
 
 .table tbody tr:hover {
-  background: rgba(154, 182, 209, 0.025);
+  background: rgba(226, 240, 218, 0.025);
 }
 
 .finding-title {
@@ -1644,7 +1665,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(200, 243, 106, 0.16);
 }
 
 input:disabled,
@@ -1725,8 +1746,8 @@ textarea:disabled {
 }
 
 .choice:has(input:checked) {
-  border-color: rgba(91, 140, 255, 0.45);
-  background: rgba(91, 140, 255, 0.06);
+  border-color: rgba(200, 243, 106, 0.45);
+  background: rgba(200, 243, 106, 0.06);
 }
 
 .error {
@@ -2188,7 +2209,7 @@ textarea:disabled {
 }
 
 .stage[data-state="current"] {
-  background: rgba(91, 140, 255, 0.08);
+  background: rgba(200, 243, 106, 0.08);
   box-shadow: inset 0 2px 0 var(--accent);
 }
 
@@ -2212,9 +2233,9 @@ textarea:disabled {
   gap: 12px 18px;
   margin-bottom: 16px;
   padding: 12px 15px;
-  border: 1px solid rgba(91, 140, 255, 0.35);
+  border: 1px solid rgba(200, 243, 106, 0.35);
   border-radius: var(--radius);
-  background: rgba(91, 140, 255, 0.06);
+  background: rgba(200, 243, 106, 0.06);
 }
 
 .scan-banner__pulse {
@@ -2974,7 +2995,9 @@ textarea:disabled {
     display: none;
   }
 
-  .toolbar .field {
+  .toolbar .field,
+  .field--wide {
+    min-width: 0;
     flex: 1 1 100%;
   }
 

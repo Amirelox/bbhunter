@@ -161,7 +161,7 @@ out/<target>/
 | Live scan | five stages, log, findings as they arrive, stop |
 | Findings | severity/status filters, search, detail drawer with evidence, triage and notes |
 | OSINT | RDAP, ASN, cloud candidates, favicons, dorks, public code |
-| Reports | HTML/Markdown/JSON, issue template copied to the clipboard |
+| Reports | HTML/Markdown/JSON, A4 print, issue template copied to the clipboard |
 | Modules | stage toggles and custom paths; a rule DSL is planned |
 | Settings | rate, concurrency, timeout, limits, proxy, API key status |
 | Logs | raw log of the latest or selected run |
@@ -237,7 +237,9 @@ therefore much faster and gentler on the APIs.
 
 ## Product site
 
-The landing page in `site/` uses the same tokens as the report.
+The landing page and the app share one dark workspace language: ink surfaces, signal lime and
+Instrument Sans/JetBrains Mono telemetry. The report switches to paper for reading and A4 print,
+with the same typography and severity hues.
 
 ```
 site/
@@ -259,8 +261,8 @@ xdg-open site/index.html
 python3 -m http.server 8081 --bind 127.0.0.1   # → http://127.0.0.1:8081/site/
 ```
 
-Serve it from the repo root: the page links `../design/fonts.css` and `../design/tokens.css`. For a
-real deployment, replace the data-URI fonts with `woff2` files and bundle the tokens.
+Serve it from the repo root: the page links `../design/fonts.css` and `site.css`. For a real
+deployment, replace the data-URI fonts with `woff2` files and bundle `site.css`.
 
 ## Architecture
 
@@ -306,14 +308,16 @@ src/
 ## Design system
 
 The HTML report is a separate system kept outside Rust — `src/report.rs` only assembles semantic
-markup and includes CSS via `include_str!`. Restyling never touches scan logic.
+markup and includes CSS via `include_str!`. Restyling never touches scan logic. The report uses the
+semantic paper tokens and ships with an A4 print stylesheet; the dark app and landing keep their own
+workspace tokens but reuse the type scale, severity hues and signal-lime accent.
 
 ```
 design/
 ├── direction.md     # product, character, world, moments, signature
 ├── foundations.md   # palette, measured contrast, type scale, grid, breakpoints
-├── tokens.css       # the only source of values (colour, spacing, type, motion)
-├── report.css       # report components, semantic tokens only
+├── tokens.css       # paper/ink/cover tokens used by the report
+├── report.css       # report components + A4 print stylesheet
 ├── fonts.css        # Instrument Sans + JetBrains Mono, latin/latin-ext, offline
 ├── review.md        # audit: findings, fixes, verification, verdict
 ├── closure.md       # consistency with the direction, deliberate omissions
@@ -321,9 +325,9 @@ design/
 ```
 
 Rules: no gradients, glows or coloured shadows; severity colour is never the only carrier of
-meaning; flat panels (radius 0) with rounding only on markers; a single accent (copper) used only
-where it marks structure. The report and the app UI are in Polish; the CLI stays in English
-(identifiers, flags, logs).
+meaning; small radii (6 px panels, 4 px controls); a single accent (signal lime) reserved for
+actions and structural markers; the report is paper with a dark cover and an A4 print stylesheet.
+The report and the app UI are in Polish; the CLI stays in English (identifiers, flags, logs).
 
 ## Known limitations
 

@@ -1,3 +1,6 @@
+> **Historyczny audyt.** Ten plik opisuje poprzednią, ciemną iterację raportu (grafit + miedź).
+> Aktualny system to atrament + papier + sygnałowa limonka — patrz `direction.md` i `foundations.md`.
+
 # Przegląd interfejsu — raport HTML bbhunter
 
 **Zakres:** jeden ekran — `report.html` generowany przez `src/report.rs`. Stany: pełny (15 ustaleń),

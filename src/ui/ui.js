@@ -86,7 +86,7 @@
     scanError: "",
   };
 
-  let findingsState = { run: null, all: [], triage: {}, loading: false, visible: 0 };
+  let findingsState = { run: null, all: [], triage: {}, loading: false, visible: 0, error: "" };
 
   // ------------------------------------------------------------- helpers
 
@@ -295,6 +295,19 @@
     } catch {}
   }
 
+  function syncFindingsUrl() {
+    if (routeName() !== "findings") return;
+    const params = new URLSearchParams();
+    if (findingsState.run) params.set("run", findingsState.run);
+    if (S.filters.q.trim()) params.set("q", S.filters.q);
+    if (S.filters.status) params.set("status", S.filters.status);
+    if (S.filters.sev.size < 4) {
+      params.set("sev", ["high", "medium", "low", "info"].filter((s) => S.filters.sev.has(s)).join(","));
+    }
+    const next = `#/findings${params.toString() ? `?${params}` : ""}`;
+    if (location.hash !== next) history.replaceState(null, "", next);
+  }
+
   function refreshFindingsChrome() {
     const table = $("#findings-table");
     if (!table) return;
@@ -305,6 +318,7 @@
         ? `${findingsState.visible} / ${findingsState.all.length}`
         : "0";
     }
+    syncFindingsUrl();
   }
 
   // ------------------------------------------------------------- scan flow
@@ -381,7 +395,7 @@
 
     return `<div class="kpis" id="kpis">
       <article class="kpi kpi--attention">
-        <div class="kpi__top"><span class="kpi__label" title="Wszystkie wagi z ostatniego przebiegu">Ustalenia</span><span class="kpi__icon">${ICON.shield}</span></div>
+        <div class="kpi__top"><span class="kpi__label" title="Wszystkie wagi z ostatniego przebiegu">Ustalenia <span class="kpi__period">/ ostatni</span></span><span class="kpi__icon">${ICON.shield}</span></div>
         <p class="kpi__value">${num(findings)}</p>
         <p class="kpi__foot"><span><strong>${num(high)}</strong> wysokich · <strong>${num(medium)}</strong> średnich</span>${
           run ? `<a class="link" href="#/findings?run=${enc(run.id)}">przejdź</a>` : ""
@@ -578,7 +592,9 @@
         })
         .join("")}</div>`;
     } catch (e) {
-      if ($("#dash-attention")) slot.innerHTML = `<p class="hint">${esc(e.message)}</p>`;
+      if ($("#dash-attention")) {
+        slot.innerHTML = empty("Nie udało się wczytać kolejki", e.message, `<button class="btn btn--ghost btn--sm" type="button" data-action="refresh-dashboard">Spróbuj ponownie</button>`, "alert");
+      }
     }
   }
 
@@ -702,6 +718,10 @@
   }
 
   function findingsTable() {
+    if (findingsState.error) {
+      findingsState.visible = 0;
+      return empty("Nie udało się wczytać ustaleń", findingsState.error, `<button class="btn btn--ghost btn--sm" type="button" data-action="refresh-findings">Spróbuj ponownie</button>`, "alert");
+    }
     const f = S.filters;
     const q = f.q.trim().toLowerCase();
     const list = findingsState.all.filter((x) => {
@@ -716,7 +736,7 @@
       return empty("Brak ustaleń", "Ten przebieg nie zwrócił żadnych ustaleń.", "", "shield");
     }
     if (!list.length) {
-      return empty("Nic nie pasuje", "Zmień filtry albo wyczyść wyszukiwanie.", "", "search");
+      return empty("Nic nie pasuje", "Zmień filtry albo wyczyść wyszukiwanie.", `<button class="btn btn--ghost btn--sm" type="button" data-action="clear-filters">Wyczyść filtry</button>`, "search");
     }
     return `<div class="table-wrap table-wrap--tall"><table class="table table--findings">
       <thead><tr><th>Waga</th><th>Ustalenie</th><th>Host</th><th>Etap</th><th>Status</th></tr></thead>
@@ -735,7 +755,21 @@
 
   async function fillFindings() {
     const q = query();
-    if (q.get("q") !== null) S.filters.q = q.get("q");
+    S.filters.q = q.get("q") || "";
+    const status = q.get("status") || "";
+    S.filters.status = ["nowe", "zweryfikowane", "zgłoszone", "odrzucone"].includes(status) ? status : "";
+    if (q.has("sev")) {
+      S.filters.sev = new Set(
+        q.get("sev").split(",").filter((s) => ["high", "medium", "low", "info"].includes(s))
+      );
+    } else {
+      S.filters.sev = new Set(["high", "medium", "low", "info"]);
+    }
+    $$('[data-action="sev"]').forEach((chip) => {
+      chip.setAttribute("aria-pressed", String(S.filters.sev.has(chip.dataset.sev)));
+    });
+    const statusSel = $("#f-status");
+    if (statusSel) statusSel.value = S.filters.status;
     const run = q.get("run") || findingsState.run || (latestRun() && latestRun().id);
     if (findingsState.run !== run) {
       findingsState.all = [];
@@ -748,6 +782,7 @@
       return;
     }
     findingsState.loading = true;
+    findingsState.error = "";
     try {
       const [all, triage] = await Promise.all([loadFindings(run), loadTriage(run)]);
       findingsState.all = all;
@@ -755,6 +790,7 @@
     } catch (e) {
       findingsState.all = [];
       findingsState.triage = {};
+      findingsState.error = e.message;
       toast(e.message, "error");
     }
     findingsState.loading = false;
@@ -766,6 +802,7 @@
     if (sel) sel.value = run;
     const input = $("#f-q");
     if (input && input.value !== S.filters.q) input.value = S.filters.q;
+    syncFindingsUrl();
   }
 
   function findingsHtml() {
@@ -888,7 +925,7 @@
       const body = [summary, rdap, asn, cloud, related, fav, dorks, code, notes].filter(Boolean).join("");
       slot.innerHTML = body || `<section class="panel panel--wide">${empty("Pusto", "Ten przebieg nie ma danych OSINT.", "", "radar")}</section>`;
     } catch {
-      slot.innerHTML = `<section class="panel panel--wide">${empty("Brak OSINT", "Ten przebieg nie zawiera danych OSINT albo źródła nie odpowiedziały.", "", "radar")}</section>`;
+      slot.innerHTML = `<section class="panel panel--wide">${empty("Brak OSINT", "Ten przebieg nie zawiera danych OSINT albo źródła nie odpowiedziały.", `<button class="btn btn--ghost btn--sm" type="button" data-action="refresh-osint">Spróbuj ponownie</button>`, "radar")}</section>`;
     }
   }
 
@@ -1067,7 +1104,7 @@
     return `<section class="panel">
       <div class="panel__head"><div><p class="eyebrow">Surowy przebieg</p><h2>Logi</h2></div><span class="meta">run.log</span></div>
       <div class="toolbar">
-        <div class="field" style="min-width:280px"><label for="l-run">Przebieg</label><select id="l-run">${runOptions(selected)}</select></div>
+        <div class="field field--wide"><label for="l-run">Przebieg</label><select id="l-run">${runOptions(selected)}</select></div>
         <label class="check"><input type="checkbox" id="l-live"${S.job && S.job.status === "running" ? " checked" : ""}> bieżący skan</label>
       </div>
       <pre class="log" id="logs-pre">Ładowanie…</pre>
@@ -1247,6 +1284,25 @@
           toast("Ustalenie skopiowane");
         } else if (a === "template") {
           await copyTemplate(t.dataset.run);
+        } else if (a === "refresh-dashboard") {
+          await fillDashboard();
+        } else if (a === "refresh-osint") {
+          await fillOsint();
+        } else if (a === "refresh-findings") {
+          await fillFindings();
+        } else if (a === "clear-filters") {
+          S.filters.q = "";
+          S.filters.status = "";
+          S.filters.sev = new Set(["high", "medium", "low", "info"]);
+          refreshFindingsChrome();
+          const input = $("#f-q");
+          if (input) {
+            input.value = "";
+            input.focus();
+          }
+          const status = $("#f-status");
+          if (status) status.value = "";
+          $$('[data-action="sev"]').forEach((chip) => chip.setAttribute("aria-pressed", "true"));
         } else if (a === "edit-scope") {
           e.preventDefault();
           S.editingScope = t.dataset.id;

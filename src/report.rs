@@ -869,6 +869,52 @@ fn render_osint(o: &osint::OsintReport) -> String {
     )
 }
 
+fn render_weights(data: &ReportData) -> String {
+    let c = counts(data.findings);
+    let total: usize = c.iter().sum();
+    if total == 0 {
+        return r#"<section class="weights" aria-label="Rozkład wag">
+  <div class="wrap weights__inner"><p class="weights__title">rozkład wag</p><p class="weights__empty">brak ustaleń · czysty przebieg</p></div>
+</section>"#
+            .to_string();
+    }
+
+    let parts = [
+        ("high", c[0], "wysokie"),
+        ("medium", c[1], "średnie"),
+        ("low", c[2], "niskie"),
+        ("info", c[3], "informacyjne"),
+    ];
+    let bars = parts
+        .iter()
+        .filter(|(_, n, _)| *n > 0)
+        .map(|(key, n, _)| {
+            format!(
+                "<span data-sev=\"{key}\" style=\"width:{:.2}%\"></span>",
+                (*n as f64 / total as f64) * 100.0
+            )
+        })
+        .collect::<String>();
+    let legend = parts
+        .iter()
+        .map(|(key, n, label)| {
+            format!(
+                "<li><span class=\"weights__dot\" data-sev=\"{key}\"></span><span class=\"weights__n\">{n}</span><span>{label}</span></li>"
+            )
+        })
+        .collect::<String>();
+
+    format!(
+        r#"<section class="weights" aria-label="Rozkład wag">
+  <div class="wrap weights__inner">
+    <p class="weights__title">rozkład wag</p>
+    <div class="weights__bar" aria-hidden="true">{bars}</div>
+    <ul class="weights__legend">{legend}</ul>
+  </div>
+</section>"#
+    )
+}
+
 // ------------------------------------------------------------------- html
 
 fn html(data: &ReportData) -> String {
@@ -919,7 +965,10 @@ fn html(data: &ReportData) -> String {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#151a13">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23151a13'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23c8f36a'/%3E%3Crect x='13' y='13' width='6' height='6' fill='%23c8f36a'/%3E%3C/svg%3E">
 <title>Raport rekonesansu — {target} · bbhunter</title>
 <style>
 {fonts}
@@ -931,9 +980,13 @@ fn html(data: &ReportData) -> String {
 <a class="skip" href="#tresc">Przejdź do treści</a>
 
 <header class="masthead">
+  <div class="wrap masthead__bar">
+    <p class="brandline"><span class="brandline__mark" aria-hidden="true"></span>bbhunter <span class="brandline__sep">·</span><span class="brandline__label">raport rekonesansu</span></p>
+    <button class="print" type="button" title="Drukuj raport lub zapisz jako PDF" onclick="window.print()">Drukuj / PDF</button>
+  </div>
   <div class="wrap masthead__inner">
     <div>
-      <p class="kicker">bbhunter · raport rekonesansu</p>
+      <p class="kicker">wynik przebiegu</p>
       <h1 class="target">{target_host}{port_html}</h1>
       <p class="submeta">{started} · {scope_text} · {hosts_n} {hosts_word}</p>
     </div>
@@ -947,6 +1000,7 @@ fn html(data: &ReportData) -> String {
   </div>
 </header>
 
+{weights}
 {trace}
 
 <main id="tresc" class="wrap layout">
@@ -995,6 +1049,7 @@ fn html(data: &ReportData) -> String {
         head_n = head_n,
         figure_label = esc(&figure_label),
         figure_of = esc(&figure_of),
+        weights = render_weights(data),
         trace = render_trace(data),
         total = total,
         ledger = render_ledger(data),

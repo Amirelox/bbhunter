@@ -1,7 +1,7 @@
 /* =========================================================================
    bbhunter — strona produktu
-   System: grafit + miedź, Instrument Sans + JetBrains Mono, jedna sekcja na
-   ekran, jedna techniczna animacja (sieć OSINT) i wejście hero.
+   System: atrament + sygnałowa limonka, Instrument Sans + JetBrains Mono,
+   jedna sekcja na ekran, jedna techniczna animacja (sieć OSINT).
    ========================================================================= */
 
 *,
@@ -11,19 +11,19 @@
 }
 
 :root {
-  --bg: #0c0e11;
-  --panel: #12151a;
-  --panel-2: #171b21;
-  --line: rgba(236, 231, 222, 0.1);
-  --line-strong: rgba(236, 231, 222, 0.18);
-  --text: #ece7de;
-  --text-2: #a8a39b;
-  --muted: #8b867e;
-  --copper: #d29563;
-  --on-copper: #12100d;
-  --high: #e8786b;
-  --med: #d8b45e;
-  --low: #8aa3b8;
+  --bg: #070a08;
+  --panel: #0d130f;
+  --panel-2: #111a14;
+  --line: rgba(232, 242, 225, 0.1);
+  --line-strong: rgba(232, 242, 225, 0.19);
+  --text: #edf3e7;
+  --text-2: #a7b3a1;
+  --muted: #7f8c7c;
+  --signal: #c8f36a;
+  --on-signal: #0d1306;
+  --high: #ff7b6b;
+  --med: #e8b45c;
+  --low: #7fb9d6;
   --wrap: 1240px;
   --pad: 32px;
   --ease: cubic-bezier(0.2, 0, 0, 1);
@@ -47,8 +47,8 @@ body {
 }
 
 ::selection {
-  background: var(--copper);
-  color: var(--on-copper);
+  background: var(--signal);
+  color: var(--on-signal);
 }
 
 h1, h2, h3, p, ul, ol, figure {
@@ -84,7 +84,7 @@ button {
 }
 
 .ok {
-  color: var(--copper);
+  color: var(--signal);
 }
 
 .wrap {
@@ -112,8 +112,18 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--copper);
+  outline: 2px solid var(--signal);
   outline-offset: 3px;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 80;
+  height: 2px;
+  background: var(--signal);
+  pointer-events: none;
 }
 
 /* --- nav ----------------------------------------------------------------- */
@@ -143,10 +153,19 @@ button {
   letter-spacing: -0.01em;
 }
 
-.brand__tick {
-  width: 3px;
-  height: 18px;
-  background: var(--copper);
+.brand__mark {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--signal);
+  border-radius: 1px;
+}
+
+.brand__mark::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: var(--signal);
 }
 
 .nav__links {
@@ -194,12 +213,12 @@ button {
 }
 
 .btn--primary {
-  background: var(--copper);
-  color: var(--on-copper);
+  background: var(--signal);
+  color: var(--on-signal);
 }
 
 .btn--primary:hover {
-  background: #dfa578;
+  background: #dcff8f;
   transform: translateY(-1px);
 }
 
@@ -213,8 +232,8 @@ button {
 }
 
 .btn--ghost:hover {
-  border-color: var(--copper);
-  color: var(--copper);
+  border-color: var(--signal);
+  color: var(--signal);
   transform: translateY(-1px);
 }
 
@@ -259,7 +278,7 @@ button {
   content: "";
   width: 1px;
   height: 14px;
-  background: var(--copper);
+  background: var(--signal);
 }
 
 h1 {
@@ -367,8 +386,8 @@ h1 {
   align-items: center;
   min-height: 38px;
   padding: 0 14px;
-  background: var(--copper);
-  color: var(--on-copper);
+  background: var(--signal);
+  color: var(--on-signal);
   font-size: 12px;
 }
 
@@ -415,16 +434,16 @@ h1 {
 
 .trace li[data-state="done"] b,
 .trace li[data-state="done"] em {
-  color: var(--copper);
+  color: var(--signal);
 }
 
 .trace li[data-state="current"] {
   color: var(--text);
-  box-shadow: inset 0 2px 0 var(--copper);
+  box-shadow: inset 0 2px 0 var(--signal);
 }
 
 .trace li[data-state="current"] b {
-  color: var(--copper);
+  color: var(--signal);
 }
 
 .console__body {
@@ -550,7 +569,7 @@ h3 {
 .pipeline {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-block-start: 1px solid var(--copper);
+  border-block-start: 1px solid var(--signal);
 }
 
 .pipeline li {
@@ -566,7 +585,7 @@ h3 {
 
 .pipeline__n {
   font-size: 12px;
-  color: var(--copper);
+  color: var(--signal);
   margin-block-end: 18px;
 }
 
@@ -602,7 +621,7 @@ h3 {
   flex: none;
   width: 8px;
   height: 1px;
-  background: var(--copper);
+  background: var(--signal);
   transform: translateY(-3px);
 }
 
@@ -644,7 +663,7 @@ h3 {
   font-family: "JetBrains Mono", monospace;
   font-size: 13px;
   color: var(--text);
-  background-image: linear-gradient(var(--copper), var(--copper));
+  background-image: linear-gradient(var(--signal), var(--signal));
   background-size: 0% 1px;
   background-position: 0 100%;
   background-repeat: no-repeat;
@@ -653,17 +672,24 @@ h3 {
 }
 
 .link-underline:hover {
-  color: var(--copper);
+  color: var(--signal);
   background-size: 100% 1px;
 }
 
 .frame {
   border: 1px solid var(--line-strong);
-  background: var(--panel);
+  background: #f2efe5;
   width: 100%;
   max-width: 792px;
   justify-self: end;
+  box-shadow: 0 32px 70px -38px rgba(0, 0, 0, 0.9);
   transition: transform 0.2s var(--ease);
+}
+
+.frame__bar {
+  border-block-end: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text-2);
 }
 
 .frame:hover {
@@ -674,7 +700,7 @@ h3 {
   --s: 0.55;
   height: calc(900px * var(--s));
   overflow: hidden;
-  background: var(--bg);
+  background: #f2efe5;
 }
 
 .frame iframe {
@@ -715,7 +741,7 @@ h3 {
 .callout {
   margin-block-start: 30px;
   padding: 14px 16px;
-  border-inline-start: 2px solid var(--copper);
+  border-inline-start: 2px solid var(--signal);
   background: var(--panel);
   font-size: 13px;
   line-height: 1.55;
@@ -742,7 +768,7 @@ h3 {
 }
 
 .map__pulse path {
-  stroke: var(--copper);
+  stroke: var(--signal);
   stroke-width: 1.5;
   fill: none;
   stroke-dasharray: 3 26;
@@ -785,8 +811,8 @@ h3 {
 }
 
 .map__node--root circle {
-  fill: var(--copper);
-  stroke: var(--copper);
+  fill: var(--signal);
+  stroke: var(--signal);
 }
 
 .map__node--root text {
@@ -857,7 +883,7 @@ h3 {
 .cmd__foot {
   border-block-end: 0;
   border-block-start: 1px solid var(--line);
-  color: var(--copper);
+  color: var(--signal);
 }
 
 .copy {
@@ -873,8 +899,8 @@ h3 {
 }
 
 .copy:hover {
-  color: var(--copper);
-  border-color: var(--copper);
+  color: var(--signal);
+  border-color: var(--signal);
 }
 
 /* --- footer -------------------------------------------------------------- */
@@ -898,8 +924,8 @@ h3 {
 }
 
 .footer a:hover {
-  color: var(--copper);
-  border-block-end-color: var(--copper);
+  color: var(--signal);
+  border-block-end-color: var(--signal);
 }
 
 /* --- wejście hero -------------------------------------------------------- */
@@ -1032,7 +1058,7 @@ h3 {
   }
 
   .pipeline li {
-    border-block-start: 1px solid var(--copper);
+    border-block-start: 1px solid var(--signal);
     padding: 20px 20px 12px;
   }
 
