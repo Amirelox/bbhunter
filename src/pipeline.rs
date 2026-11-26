@@ -6,18 +6,24 @@ use std::time::{Duration, Instant};
 
 use crate::cli::ReconArgs;
 use crate::crawl;
+use crate::discovery::{self, DiscoveryScan};
 use crate::dnsx::Resolver;
 use crate::findings::{Findings, Severity, Stage};
 use crate::http::Http;
 use crate::log;
 use crate::osint;
 use crate::paths::{self, PathScan};
+use crate::ports::{self, PortScan};
 use crate::probe::{self, HostResult};
 use crate::report;
 use crate::scope::Scope;
+use crate::shots::{self, Screenshot};
 use crate::subs;
+use crate::tech;
+use crate::tls::{self, TlsScan};
 use crate::triage::Triage;
 use crate::util;
+use crate::vhosts::{self, VhostScan};
 use crate::wayback;
 
 /// Hosts that appear in URLs or redirect targets and are not known yet.
@@ -62,6 +68,7 @@ pub async fn recon(
     args: ReconArgs,
     cancel: &AtomicBool,
     extra_paths: &[String],
+    discovery_paths: &[String],
 ) -> Result<PathBuf> {
     let started = now();
     let total_start = Instant::now();
@@ -70,6 +77,7 @@ pub async fn recon(
     let mut t_probe = Duration::ZERO;
     let mut t_crawl = Duration::ZERO;
     let mut t_paths = Duration::ZERO;
+    let mut t_modules = Duration::ZERO;
     let mut t_enrich = Duration::ZERO;
     let inputs = args.targets.hosts(scope)?;
     let roots: BTreeSet<String> = inputs
@@ -370,6 +378,126 @@ pub async fn recon(
         frontier = new_hosts;
     }
 
+    // 7b. Optional surface modules. They run once, after discovery has settled,
+    // so they do not multiply work across recursive rounds.
+    let mut port_scan = PortScan::default();
+    let mut tls_scan = TlsScan::default();
+    let mut vhost_scan = VhostScan::default();
+    let mut discovery_scan = DiscoveryScan::default();
+    let mut screenshots: Vec<Screenshot> = Vec::new();
+    let mut module_notes: Vec<String> = Vec::new();
+    let module_start = Instant::now();
+    if !cancelled {
+        if args.skip_ports {
+            module_notes.push("Port scan był wyłączony (--no-ports).".to_string());
+        } else {
+            log::stage("port scan (TCP connect + banner)");
+            match ports::scan(&hosts, 20, &args.ports, concurrency, 4, scope, cancel).await {
+                Ok(mut scan) => {
+                    log::ok(&format!(
+                        "porty: {} otwartych / {} sprawdzeń na {} hostach",
+                        scan.open.len(),
+                        scan.checked,
+                        scan.hosts
+                    ));
+                    findings.merge(std::mem::take(&mut scan.findings));
+                    port_scan = scan;
+                }
+                Err(e) => {
+                    module_notes.push(format!("Port scan nie uruchomił się: {e:#}"));
+                    log::warn(&format!("port scan: {e:#}"));
+                }
+            }
+        }
+        if args.skip_tls {
+            module_notes.push("Analiza TLS była wyłączona (--no-tls).".to_string());
+        } else {
+            log::stage("TLS (certyfikat, wersje, szyfry)");
+            tls_scan = tls::scan(&hosts, 30, concurrency, 8, scope, cancel).await;
+            log::ok(&format!(
+                "TLS: {} hostów, {} SAN, {} przestarzałych wersji",
+                tls_scan.results.len(),
+                tls_scan.san.len(),
+                tls_scan
+                    .results
+                    .iter()
+                    .filter(|r| !r.weak_versions.is_empty())
+                    .count()
+            ));
+            findings.merge(std::mem::take(&mut tls_scan.findings));
+            for san in &tls_scan.san {
+                if scope.allows(san) {
+                    known.insert(san.clone());
+                    triage.add_host(san);
+                }
+            }
+        }
+        if args.vhosts {
+            log::stage("virtual hosts (Host header)");
+            vhost_scan = vhosts::scan(http, &hosts, 8, concurrency, 8, scope, cancel).await;
+            log::ok(&format!(
+                "vhosty: {} trafień / {} requestów",
+                vhost_scan.hits.len(),
+                vhost_scan.checked
+            ));
+            findings.merge(std::mem::take(&mut vhost_scan.findings));
+            for host in &vhost_scan.discovered {
+                if scope.allows(host) {
+                    known.insert(host.clone());
+                    triage.add_host(host);
+                }
+            }
+        }
+        if args.discovery {
+            log::stage("content discovery (paths + files)");
+            let custom = if discovery_paths.is_empty() {
+                &[][..]
+            } else {
+                discovery_paths
+            };
+            discovery_scan =
+                discovery::scan(http, &hosts, 10, custom, concurrency, scope, cancel).await;
+            log::ok(&format!(
+                "discovery: {} trafień / {} requestów",
+                discovery_scan.hits.len(),
+                discovery_scan.checked
+            ));
+            findings.merge(std::mem::take(&mut discovery_scan.findings));
+            for hit in &discovery_scan.hits {
+                triage.add_url(&hit.url);
+            }
+        }
+        if args.screenshots {
+            log::stage("zrzuty ekranu (Chromium)");
+            let shots = shots::scan(
+                &hosts,
+                &out.join(&target_name).join("screenshots"),
+                10,
+                scope,
+                cancel,
+            )
+            .await;
+            screenshots = shots.shots;
+            module_notes.extend(shots.notes);
+            log::ok(&format!("zrzuty: {}", screenshots.len()));
+        }
+    }
+    t_modules += module_start.elapsed();
+
+    // Surface fingerprints that only appear in crawled URLs or path hits.
+    for h in &mut hosts {
+        let name = util::host_of(&h.host).unwrap_or_else(|| h.host.clone());
+        let urls = crawl_all
+            .urls
+            .iter()
+            .chain(crawl_all.js.iter())
+            .chain(paths_all.extra_urls.iter())
+            .chain(discovery_scan.hits.iter().map(|h| &h.url))
+            .filter(|u| util::host_of(u).as_deref() == Some(name.as_str()))
+            .map(String::as_str);
+        tech::merge(&mut h.tech, tech::detect_urls(urls));
+    }
+
     findings.sort();
     hosts.sort_by(|a, b| a.host.cmp(&b.host));
 
@@ -452,6 +580,7 @@ pub async fn recon(
     if args.wayback && wayback_urls.is_empty() {
         notes.push("Wayback Machine nie zwrócił URL-i dla tego celu.".to_string());
     }
+    notes.extend(module_notes);
     if hosts.is_empty() {
         notes.push(
             "Żaden host nie odpowiedział po HTTP. Sprawdź DNS, firewall i --timeout.".to_string(),
@@ -484,6 +613,11 @@ pub async fn recon(
         wayback: &wayback_urls,
         notes: &notes,
         osint: osint_final.as_ref(),
+        ports: &port_scan,
+        tls: &tls_scan,
+        vhosts: &vhost_scan,
+        discovery: &discovery_scan,
+        screenshots: &screenshots,
     };
     let report_start = Instant::now();
     report::write_all(&dir, &data)?;
@@ -495,12 +629,13 @@ pub async fn recon(
         findings.len()
     ));
     log::ok(&format!(
-        "czasy: OSINT {:.1}s · DNS {:.1}s · probe {:.1}s · crawl {:.1}s · paths {:.1}s · enrich {:.1}s · raport {:.1}s · razem {:.1}s",
+        "czasy: OSINT {:.1}s · DNS {:.1}s · probe {:.1}s · crawl {:.1}s · paths {:.1}s · moduły {:.1}s · enrich {:.1}s · raport {:.1}s · razem {:.1}s",
         t_osint.as_secs_f64(),
         t_dns.as_secs_f64(),
         t_probe.as_secs_f64(),
         t_crawl.as_secs_f64(),
         t_paths.as_secs_f64(),
+        t_modules.as_secs_f64(),
         t_enrich.as_secs_f64(),
         t_report.as_secs_f64(),
         total_start.elapsed().as_secs_f64(),

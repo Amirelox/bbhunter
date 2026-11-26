@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#151a13">
 <meta name="robots" content="noindex">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23151a13'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23c8f36a'/%3E%3Crect x='13' y='13' width='6' height='6' fill='%23c8f36a'/%3E%3C/svg%3E">
-<title>Raport rekonesansu — 127.0.0.1:8765 · bbhunter</title>
+<title>Raport rekonesansu — 127.0.0.1:9443 · bbhunter</title>
 <style>
 /* Fonty: Instrument Sans, JetBrains Mono (SIL Open Font License 1.1).
    Subset latin + latin-ext, wbudowany jako data URI — raport działa offline.
@@ -1189,13 +1189,66 @@ h2 {
 }
 
 .tag {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 4px;
+  padding: 1px 4px;
+  border: 1px solid var(--color-line);
+  border-radius: 1px;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9.5px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .tag--in {
   color: var(--color-accent);
+}
+
+.tag--warn {
+  border-color: color-mix(in srgb, var(--color-sev-medium) 35%, transparent);
+  color: var(--color-sev-medium);
+}
+
+.tag--bad {
+  border-color: color-mix(in srgb, var(--color-sev-high) 35%, transparent);
+  color: var(--color-sev-high);
+}
+
+.shots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.shot {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.shot__host {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-block-end: 8px;
+  font-size: 12px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--color-line);
+  background: var(--color-raised);
+}
+
+@media (max-width: 640px) {
+  .shots {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* --- responsywność ------------------------------------------------------ */
@@ -1562,8 +1615,13 @@ h2 {
   .hosts tr,
   .lead,
   .note,
+  .shot,
   .rail section {
     break-inside: avoid;
+  }
+
+  .shots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ledger tbody tr:hover,
@@ -1600,14 +1658,14 @@ h2 {
   <div class="wrap masthead__inner">
     <div>
       <p class="kicker">wynik przebiegu</p>
-      <h1 class="target">127.0.0.1<span class="target__port">:8765</span></h1>
-      <p class="submeta">26 lis 2026, 01:24 · zakres wymuszony · 1 host</p>
+      <h1 class="target">127.0.0.1<span class="target__port">:9443</span></h1>
+      <p class="submeta">26 lis 2026, 21:03 · zakres wymuszony · 1 host</p>
     </div>
     <div class="figure" data-sev="high">
-      <p class="figure__num num">2</p>
+      <p class="figure__num num">1</p>
       <div>
-        <p class="figure__label">wysokie ustalenia</p>
-        <p class="figure__of">łącznie 8 ustaleń</p>
+        <p class="figure__label">wysokie ustalenie</p>
+        <p class="figure__of">łącznie 10 ustaleń</p>
       </div>
     </div>
   </div>
@@ -1616,8 +1674,8 @@ h2 {
 <section class="weights" aria-label="Rozkład wag">
   <div class="wrap weights__inner">
     <p class="weights__title">rozkład wag</p>
-    <div class="weights__bar" aria-hidden="true"><span data-sev="high" style="width:25.00%"></span><span data-sev="medium" style="width:12.50%"></span><span data-sev="low" style="width:25.00%"></span><span data-sev="info" style="width:37.50%"></span></div>
-    <ul class="weights__legend"><li><span class="weights__dot" data-sev="high"></span><span class="weights__n">2</span><span>wysokie</span></li><li><span class="weights__dot" data-sev="medium"></span><span class="weights__n">1</span><span>średnie</span></li><li><span class="weights__dot" data-sev="low"></span><span class="weights__n">2</span><span>niskie</span></li><li><span class="weights__dot" data-sev="info"></span><span class="weights__n">3</span><span>informacyjne</span></li></ul>
+    <div class="weights__bar" aria-hidden="true"><span data-sev="high" style="width:10.00%"></span><span data-sev="medium" style="width:20.00%"></span><span data-sev="low" style="width:30.00%"></span><span data-sev="info" style="width:40.00%"></span></div>
+    <ul class="weights__legend"><li><span class="weights__dot" data-sev="high"></span><span class="weights__n">1</span><span>wysokie</span></li><li><span class="weights__dot" data-sev="medium"></span><span class="weights__n">2</span><span>średnie</span></li><li><span class="weights__dot" data-sev="low"></span><span class="weights__n">3</span><span>niskie</span></li><li><span class="weights__dot" data-sev="info"></span><span class="weights__n">4</span><span>informacyjne</span></li></ul>
   </div>
 </section>
 <section class="trace" aria-labelledby="trace-title">
@@ -1632,17 +1690,17 @@ h2 {
 <li class="st" data-sev="medium">
   <p class="st__num num">1</p>
   <p class="st__label">host</p>
-  <p class="st__sev"><span class="sevpart medium">1 średnie</span> · <span class="sevpart low">2 niskie</span> · <span class="sevpart info">3 informacyjne</span></p>
+  <p class="st__sev"><span class="sevpart medium">1 średnie</span> · <span class="sevpart low">3 niskie</span> · <span class="sevpart info">3 informacyjne</span></p>
 </li>
 <li class="st" data-sev="none">
-  <p class="st__num num">1</p>
-  <p class="st__label">strona</p>
+  <p class="st__num num">3</p>
+  <p class="st__label">strony</p>
   <p class="st__sev">brak ustaleń</p>
 </li>
-<li class="st" data-sev="high">
+<li class="st" data-sev="none">
   <p class="st__num num">28</p>
   <p class="st__label">ścieżek</p>
-  <p class="st__sev"><span class="sevpart high">2 wysokie</span></p>
+  <p class="st__sev">brak ustaleń</p>
 </li>
     </ol>
   </div>
@@ -1653,7 +1711,7 @@ h2 {
     <section class="block" aria-labelledby="findings-title">
       <div class="block__head">
         <h2 id="findings-title"><span class="tick" aria-hidden="true"></span>Ustalenia</h2>
-        <p class="block__meta">8</p>
+        <p class="block__meta">10</p>
       </div>
       <table class="ledger">
   <caption class="sr-only">Ustalenia z automatycznych sprawdzeń, od najwyższej wagi</caption>
@@ -1669,26 +1727,35 @@ h2 {
 <tr data-sev="high">
   <td class="c-sev"><span class="sev">wysokie</span></td>
   <td class="c-find">
-    <span class="find__title">Wystawiony .env z poświadczeniami</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/.env" rel="noreferrer">http://127.0.0.1:8765/.env</a> · konfiguracja</span>
+    <span class="find__title">Wystawiony plik kopii zapasowej</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/backup.zip" rel="noreferrer">https://127.0.0.1:9443/backup.zip</a> · discovery</span>
   </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">ścieżki</td>
-</tr>
-<tr data-sev="high">
-  <td class="c-sev"><span class="sev">wysokie</span></td>
-  <td class="c-find">
-    <span class="find__title">Wystawiony .git/HEAD (ujawnienie źródeł)</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/.git/HEAD" rel="noreferrer">http://127.0.0.1:8765/.git/HEAD</a> · repozytorium git</span>
-  </td>
-  <td class="c-host cell-host">127.0.0.1</td>
-  <td class="c-stage cell-stage">ścieżki</td>
+  <td class="c-host cell-host">127.0.0.1:9443</td>
+  <td class="c-stage cell-stage">discovery</td>
 </tr>
 <tr data-sev="medium">
   <td class="c-sev"><span class="sev">średnie</span></td>
   <td class="c-find">
     <span class="find__title">Brak Content-Security-Policy</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/" rel="noreferrer">http://127.0.0.1:8765/</a> · nagłówki</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · nagłówki</span>
+  </td>
+  <td class="c-host cell-host">127.0.0.1</td>
+  <td class="c-stage cell-stage">sonda</td>
+</tr>
+<tr data-sev="medium">
+  <td class="c-sev"><span class="sev">średnie</span></td>
+  <td class="c-find">
+    <span class="find__title">Certyfikat nie obejmuje tego hosta</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · tls</span>
+  </td>
+  <td class="c-host cell-host">127.0.0.1:9443</td>
+  <td class="c-stage cell-stage">TLS</td>
+</tr>
+<tr data-sev="low">
+  <td class="c-sev"><span class="sev">niskie</span></td>
+  <td class="c-find">
+    <span class="find__title">Brak X-Content-Type-Options: nosniff</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · nagłówki</span>
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
@@ -1696,8 +1763,8 @@ h2 {
 <tr data-sev="low">
   <td class="c-sev"><span class="sev">niskie</span></td>
   <td class="c-find">
-    <span class="find__title">Brak X-Content-Type-Options: nosniff</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/" rel="noreferrer">http://127.0.0.1:8765/</a> · nagłówki</span>
+    <span class="find__title">Brak nagłówka HSTS</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · nagłówki</span>
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
@@ -1706,7 +1773,7 @@ h2 {
   <td class="c-sev"><span class="sev">niskie</span></td>
   <td class="c-find">
     <span class="find__title">Brak ochrony przed clickjackingiem (X-Frame-Options / CSP frame-ancestors)</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/" rel="noreferrer">http://127.0.0.1:8765/</a> · nagłówki</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · nagłówki</span>
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
@@ -1715,7 +1782,7 @@ h2 {
   <td class="c-sev"><span class="sev">informacyjne</span></td>
   <td class="c-find">
     <span class="find__title">Brak Permissions-Policy</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/" rel="noreferrer">http://127.0.0.1:8765/</a> · nagłówki</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · nagłówki</span>
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
@@ -1724,7 +1791,7 @@ h2 {
   <td class="c-sev"><span class="sev">informacyjne</span></td>
   <td class="c-find">
     <span class="find__title">Brak Referrer-Policy</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/" rel="noreferrer">http://127.0.0.1:8765/</a> · nagłówki</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · nagłówki</span>
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
@@ -1733,14 +1800,80 @@ h2 {
   <td class="c-sev"><span class="sev">informacyjne</span></td>
   <td class="c-find">
     <span class="find__title">Ujawniona wersja w `server`</span>
-    <span class="find__path"><a href="http://127.0.0.1:8765/" rel="noreferrer">http://127.0.0.1:8765/</a> · ujawnienie</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/" rel="noreferrer">https://127.0.0.1:9443/</a> · ujawnienie</span>
   </td>
   <td class="c-host cell-host">127.0.0.1</td>
   <td class="c-stage cell-stage">sonda</td>
 </tr>
+<tr data-sev="info">
+  <td class="c-sev"><span class="sev">informacyjne</span></td>
+  <td class="c-find">
+    <span class="find__title">Odnaleziony panel administracyjny</span>
+    <span class="find__path"><a href="https://127.0.0.1:9443/admin/" rel="noreferrer">https://127.0.0.1:9443/admin/</a> · discovery</span>
+  </td>
+  <td class="c-host cell-host">127.0.0.1:9443</td>
+  <td class="c-stage cell-stage">discovery</td>
+</tr>
   </tbody>
 </table>
     </section>
+
+    <section class="block" aria-labelledby="shots-title">
+  <div class="block__head"><h2 id="shots-title"><span class="tick" aria-hidden="true"></span>Zrzuty ekranu</h2><p class="block__meta">1</p></div>
+  <div class="shots"><figure class="shot">
+  <p class="shot__host"><span class="cell-name">127.0.0.1:9443</span><span class="alias-note">https://127.0.0.1:9443/</span></p>
+  <a href="screenshots/127.0.0.1_9443-78c8b3.png" rel="noreferrer"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCAHCAtADAREAAhEBAxEB/9sAQwAKBwgJCAYKCQgJDAsKDA8aEQ8ODg8fFhgTGiUhJyYkISQjKS47MiksOCwjJDNGNDg9P0JDQigxSE1IQE07QUI//9sAQwELDAwPDQ8eEREePyokKj8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8//8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDyikSFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAPhjMs8cQIBdgoJ6DNJuyuB0P8AwjkEpiEV06II8u8iKpLea6Z2luANvYk+3Nc3t2t1/Vr9hXIz4cj+zQyresxZQ8iiHoDEZDt+b5jgYHTOe1P27u1b+r2C5lz2SwaqlpJMVjYpmQpgqrAHJXPUA8jPUda2U7w5kgNVPC8yukd3MYpXcIEjj34yQoJ5HG7cD6Fe+axeIW8UFyvY6XbSSWazXDeZcxSSbdmEQLvAJbPqmelVKpJXstv+B/mFxraKAl3tndnt5NpXywMrx82S3TnjGfXjNP2u2m4XLi+GA2p/Zftbqm8xh2gwdwk2D5d2cE9/0rP6x7vNb8fK4XKcGi+bNawmdxLOpcnyxsCgMeGLDLfL04Ge9aOrZN22C5R1C1FnevAsgkCgEMMdwD2JGeccE1pCXNG4ytVAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQBL9quPMD+fLvC7d285x6fSlyrawDfOl4/ev8pBHzHjHSiyAaxLMWYkk8knvTAf5824t5r7iCCdxzg8n+ZpWQDQ7jGGb5Rgc9B6fqadgHC4mC7fNfbwdu4446cUuVdgJJL26luXuHuJPOfO5w2Cc9uO3tSUIpWsBEJpQqqJX2q25RuOAfUe9OyAR3aRy8jFmPVmOSaaVtgG0AFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQBoaHo97ruppYacged1LfMcAADJJNAF/wAReEdX8NwQzanFGI5mKq0b7uQM4P8AntRcDDhhknmSGCNpJXO1UQZLH0AoA7K1+GHia4gErw28BIyElm+b9AaVwMbUfCesaZq9np17bLHPeSCOA7wVckgdR7kU7gXNb8B67ommSX97DF9njIDmOQMRk4Bx9cUXAydB0O+8Qaj9i02NXmCFzubAAHcn8R+dAFrxH4V1Tw0tu2qJEouCwTy33fdxn+YoA2l+F/iZlBEV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AUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFAEizzIECSuojJKYYjaT1x6UAR0AFABQAUAFABQAUAFABQAA4OR1oAVmZ2LOSzMckk5JNACUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFAC7W/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAbW/un8qADa390/lQAlABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAOiTzJUTONzAZobsgNy68M3CXLQ2bvM6btyyRbGGCQOATgHGQSRXPHERteWgrlOPRLyVo1iEbs4ViFbJQMhkGf+Agn8Kt1orf+tbBcjv9MlsIUa4OJGkZNmOgCowOfcOKcKim9P63/wAgK9nB9qvYLfdt82RU3YzjJxmrk+WLYy++kB4vOtLnfCjOsrzJ5flldvJwTwdwA757VkqtnaS1FcWXQbuJIS20NJuXDHHzqzKVB/i4XOenI9RkVaLuFyKDRbueNXQxAMF2hpANxYEgfkppurFBceug37xySRorxou4MrZDjbu4/D/DrR7aC0YXHLocw8zzriGMRozE5JAICnacDrhhS9suiC4xtDvUiilkVUhlQv5jkqqgYznI/wBodOuaftottLcLiwaHdXIT7KPNLRl+Bx99l4I/3DycUOtGO4XMutRmhaactzpstyJWLxlh5UaBiAADub5gQvXkA9Dms5VOWSQiafQblJr5YHSdLNmV3UED5evbjAH/AOupVaLSvpcLjLvRZre7khjljmVHkTepI5RdzcH2pxqpq70/4IXKt9YzWEwiuMByM4Hb/H6jirhNTV0MrVQBQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFADon8uVJAASrA4PQ4oaurAasGvT29xJNFa2oklkErFlZvnGcEZbg/MenrWLopqzbFYSPXZ4n3JbW4PydnIIRCigjdyNpIx3zzmh0U+v9bhYrX2ovexqjwQRBXLgRKVGSADxnHRR+VXCmo9QK9tO1tdRToAXiYOobpkciqkuZWGabeIJ2YE2lmFww8sRkIc4zlc4PQdR2HpWPsF3YrCnxHdFgWgt2IbcNwY87i2eW65Y/gSOnFHsI9wsNbX52ZT9ltRtKlQqsoGAQOA3oTT9iu7Cwi67MIDD9ktWjKhdrKzYAGOMtwcdxzR7FXvdhYBr0wZj9ltTvJLBlYg5GDkFsdAKPYruwsPPiK5KqptbQqM8GM4bIAO7n5ug656UvYR7sLBD4hnt/L8m2th5YGNyZwQztkDoOZGxjoKHQT3b/r/AIYLGMTkkgY9hW4y/Zao9lbvFHa2zbwwMjoS+GGCA2cjjjis5U1J3bYi0fEVw3mZtbTMm/cfLOTvG1jnPBI6nqaj2Ee7Cwf8JFcZkP2W0zICGPlnPIKk9eCQeT1NHsI92FilqGoPfCIPDBCsQIVYU2jn26VpCChfUCnVjCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoA/9k=" alt="Zrzut ekranu 127.0.0.1:9443" loading="lazy"></a>
+</figure></div>
+</section>
+    <section class="block" aria-labelledby="ports-title">
+  <div class="block__head"><h2 id="ports-title"><span class="tick" aria-hidden="true"></span>Usługi sieciowe</h2><p class="block__meta">1 / 1</p></div>
+  <table class="hosts">
+  <caption class="sr-only">Otwarte porty i usługi</caption>
+  <thead><tr><th scope="col" class="c-name">Host</th><th scope="col" class="c-status">Port</th><th scope="col" class="c-tech">Usługa</th><th scope="col" class="c-title">Banner</th></tr></thead>
+  <tbody><tr>
+  <td class="c-name"><span class="cell-name">127.0.0.1:9443</span><span class="alias-note">127.0.0.1</span></td>
+  <td class="c-status"><span class="status" data-class="2">9443</span></td>
+  <td class="c-tech cell-tech">https-alt</td>
+  <td class="c-title cell-title">—</td>
+</tr>
+</tbody>
+</table>
+</section>
+    <section class="block" aria-labelledby="tls-title">
+  <div class="block__head"><h2 id="tls-title"><span class="tick" aria-hidden="true"></span>TLS i certyfikaty</h2><p class="block__meta">1 / 1</p></div>
+  <table class="hosts">
+  <caption class="sr-only">Certyfikaty i negocjowane parametry TLS</caption>
+  <thead><tr><th scope="col" class="c-name">Host</th><th scope="col" class="c-status">TLS</th><th scope="col" class="c-tech">Szyfr</th><th scope="col" class="c-title">SAN i ważność</th></tr></thead>
+  <tbody><tr>
+  <td class="c-name"><span class="cell-name">127.0.0.1:9443</span><span class="alias-note">127.0.0.1:9443</span></td>
+  <td class="c-status"><span class="status" data-class="2">TLSv1.3</span><span class="tag tag--warn" title="Certyfikat nie obejmuje tego hosta">host</span></td>
+  <td class="c-tech cell-tech">TLS_AES_256_GCM_SHA384</td>
+  <td class="c-title cell-title">localhost <span class="alias-note">wystawca: localhost · wygasa Nov 28 19:27:42 2026 GMT</span></td>
+</tr>
+</tbody>
+</table>
+</section>
+    
+    <section class="block" aria-labelledby="discovery-title">
+  <div class="block__head"><h2 id="discovery-title"><span class="tick" aria-hidden="true"></span>Content discovery</h2><p class="block__meta">2 / 46</p></div>
+  <table class="hosts">
+  <caption class="sr-only">Trafienia content discovery</caption>
+  <thead><tr><th scope="col" class="c-name">URL</th><th scope="col" class="c-status">HTTP</th><th scope="col" class="c-tech">Typ</th><th scope="col" class="c-title">Tytuł</th></tr></thead>
+  <tbody><tr>
+  <td class="c-name"><a href="https://127.0.0.1:9443/admin/" rel="noreferrer">https://127.0.0.1:9443/admin/</a></td>
+  <td class="c-status"><span class="status" data-class="2">200</span></td>
+  <td class="c-tech cell-tech">panel</td>
+  <td class="c-title cell-title">Admin · 55 B</td>
+</tr>
+<tr>
+  <td class="c-name"><a href="https://127.0.0.1:9443/backup.zip" rel="noreferrer">https://127.0.0.1:9443/backup.zip</a></td>
+  <td class="c-status"><span class="status" data-class="2">200</span></td>
+  <td class="c-tech cell-tech">backup</td>
+  <td class="c-title cell-title">— · 11 B</td>
+</tr>
+</tbody>
+</table>
+</section>
 
     <section class="block" aria-labelledby="hosts-title">
       <div class="block__head">
@@ -1759,7 +1892,7 @@ h2 {
   </thead>
   <tbody>
 <tr>
-  <td class="c-name"><span class="cell-name">127.0.0.1:8765</span></td>
+  <td class="c-name"><span class="cell-name">127.0.0.1:9443</span></td>
   <td class="c-status"><span class="status" data-class="2">200</span></td>
   <td class="c-tech cell-tech">—</td>
   <td class="c-title cell-title">ACME Portal</td>
@@ -1776,7 +1909,7 @@ h2 {
       <div class="leads"><details class="lead">
   <summary><span class="lead__name">admin-panels</span><span class="lead__n">1</span></summary>
   <ul class="lead__list">
-<li><a href="http://127.0.0.1:8765/admin/" rel="noreferrer">http://127.0.0.1:8765/admin/</a></li>
+<li><a href="https://127.0.0.1:9443/admin/" rel="noreferrer">https://127.0.0.1:9443/admin/</a></li>
   </ul>
 </details>
 </div>
@@ -1789,9 +1922,9 @@ h2 {
   <ul class="rows">
 <li><span>subdomena</span><span class="n">1</span></li>
 <li><span>host</span><span class="n">1</span></li>
-<li><span>adres URL</span><span class="n">1</span></li>
+<li><span>adresy URL</span><span class="n">3</span></li>
 <li><span>endpoint</span><span class="n">1</span></li>
-<li><span>plik JS</span><span class="n">1</span></li>
+<li><span>plików JS</span><span class="n">0</span></li>
 <li><span>potencjalnych sekretów</span><span class="n">0</span></li>
   </ul>
 </section><section aria-label="Statusy odpowiedzi">
@@ -1802,13 +1935,21 @@ h2 {
 <li data-sev="medium"><span class="bars__label">4xx</span><span class="bars__bar"><i style="--v:0%"></i></span><span class="bars__n">0</span></li>
 <li data-sev="high"><span class="bars__label">5xx</span><span class="bars__bar"><i style="--v:0%"></i></span><span class="bars__n">0</span></li>
   </ul>
+</section><section aria-label="Moduły">
+  <p class="rail__label"><span class="tick" aria-hidden="true"></span>Moduły</p>
+  <ul class="rows">
+<li><span>otwarte porty</span><span class="n">1</span></li>
+<li><span>hosty TLS</span><span class="n">1</span></li>
+<li><span>content discovery</span><span class="n">2</span></li>
+<li><span>zrzuty ekranu</span><span class="n">1</span></li>
+  </ul>
 </section></aside>
 </main>
 
 <footer class="footer">
   <div class="wrap">
     <p>Wyniki automatyczne to tropy, nie potwierdzone podatności. Otwórz każdy wysoko oceniony wiersz w Burpie i potwierdź wpływ, zanim zgłosisz.</p>
-    <p class="mono">bbhunter 0.1.0 · wygenerowano 26 lis 2026, 01:24</p>
+    <p class="mono">bbhunter 0.1.0 · wygenerowano 26 lis 2026, 21:03</p>
   </div>
 </footer>
 </body>

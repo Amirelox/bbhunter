@@ -38,6 +38,9 @@ pub struct HostResult {
     /// (final_url + title) hash; equal values mean alias hosts.
     pub fingerprint: u64,
     pub alias_of: Option<String>,
+    /// Passive edge inference (WAF/CDN) from response headers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waf: Option<String>,
     /// Open non-HTTP services for hosts that do not answer on 80/443.
     pub services: Vec<String>,
 }
@@ -68,7 +71,7 @@ async fn open_services(host: &str) -> Vec<String> {
     results.into_iter().flatten().collect()
 }
 
-fn title_of(f: &Fetched) -> String {
+pub(crate) fn title_of(f: &Fetched) -> String {
     let doc = Html::parse_document(&f.body);
     doc.select(&TITLE_SELECTOR)
         .next()
@@ -139,6 +142,7 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
                 elapsed_ms: 0,
                 fingerprint: fingerprint(&format!("tcp://{host}"), ""),
                 alias_of: None,
+                waf: None,
                 services,
             },
             findings,
@@ -147,6 +151,7 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
 
     let mut findings = Findings::with_stage(Stage::Probe);
     let tech = tech::detect(&f.headers, &f.body);
+    let waf = tech::detect_waf(&f.headers, &f.body);
     let status = f.status;
     let title = if f.is_html() {
         title_of(&f)
@@ -171,7 +176,11 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
         } else {
             truncate(&title, 60)
         },
-        tech.join(","),
+        if tech.is_empty() {
+            "-".to_string()
+        } else {
+            tech.join(",")
+        },
         f.final_url.trim_end_matches('/')
     ));
 
@@ -191,6 +200,7 @@ async fn probe_one(http: &Http, resolver: &Resolver, host: &str) -> Option<(Host
             elapsed_ms: f.elapsed_ms,
             fingerprint: fingerprint(&f.final_url, &title),
             alias_of: None,
+            waf,
             services: Vec::new(),
         },
         findings,

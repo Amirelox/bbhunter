@@ -10,6 +10,10 @@ pub enum Stage {
     Probe,
     Crawl,
     Paths,
+    Ports,
+    Tls,
+    Vhosts,
+    Discovery,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -1,6 +1,7 @@
 mod cache;
 mod cli;
 mod crawl;
+mod discovery;
 mod dnsx;
 mod findings;
 mod http;
@@ -8,13 +9,17 @@ mod log;
 mod osint;
 mod paths;
 mod pipeline;
+mod ports;
 mod probe;
 mod report;
 mod scope;
+mod shots;
 mod subs;
 mod tech;
+mod tls;
 mod triage;
 mod util;
+mod vhosts;
 mod wayback;
 mod web;
 
@@ -27,13 +32,18 @@ use std::path::{Path, PathBuf};
 
 use cli::{Cli, Cmd, PathsArgs, Profile, ReconArgs, SubsArgs, TargetArgs};
 use crawl::CrawlResult;
+use discovery::DiscoveryScan;
 use dnsx::Resolver;
 use findings::{Findings, Stage};
 use http::Http;
 use paths::PathScan;
+use ports::PortScan;
 use scope::Scope;
+use shots::Screenshot;
+use tls::TlsScan;
 use triage::Triage;
 use util::slug;
+use vhosts::VhostScan;
 
 #[tokio::main]
 async fn main() {
@@ -337,6 +347,11 @@ async fn cmd_probe(
     let triage = Triage::default();
     let wayback = BTreeSet::new();
     let no_notes: Vec<String> = Vec::new();
+    let ports = PortScan::default();
+    let tls = TlsScan::default();
+    let vhosts = VhostScan::default();
+    let discovery = DiscoveryScan::default();
+    let screenshots: Vec<Screenshot> = Vec::new();
     let data = report::ReportData {
         target: label(&hosts[0]),
         scope_enforced: scope.is_enforced(),
@@ -350,6 +365,11 @@ async fn cmd_probe(
         wayback: &wayback,
         notes: &no_notes,
         osint: None,
+        ports: &ports,
+        tls: &tls,
+        vhosts: &vhosts,
+        discovery: &discovery,
+        screenshots: &screenshots,
     };
     report::write_all(&dir, &data)?;
     Ok(())
@@ -378,6 +398,11 @@ async fn cmd_crawl(
     let wayback = BTreeSet::new();
     let findings = Findings::with_stage(Stage::Crawl);
     let no_notes: Vec<String> = Vec::new();
+    let ports = PortScan::default();
+    let tls = TlsScan::default();
+    let vhosts = VhostScan::default();
+    let discovery = DiscoveryScan::default();
+    let screenshots: Vec<Screenshot> = Vec::new();
     let data = report::ReportData {
         target: label(&urls[0]),
         scope_enforced: scope.is_enforced(),
@@ -391,6 +416,11 @@ async fn cmd_crawl(
         wayback: &wayback,
         notes: &no_notes,
         osint: None,
+        ports: &ports,
+        tls: &tls,
+        vhosts: &vhosts,
+        discovery: &discovery,
+        screenshots: &screenshots,
     };
     report::write_all(&dir, &data)?;
     Ok(())
@@ -420,6 +450,11 @@ async fn cmd_paths(
     let triage = Triage::default();
     let wayback = BTreeSet::new();
     let no_notes: Vec<String> = Vec::new();
+    let ports = PortScan::default();
+    let tls = TlsScan::default();
+    let vhosts = VhostScan::default();
+    let discovery = DiscoveryScan::default();
+    let screenshots: Vec<Screenshot> = Vec::new();
     let data = report::ReportData {
         target: label(&bases[0]),
         scope_enforced: scope.is_enforced(),
@@ -433,6 +468,11 @@ async fn cmd_paths(
         wayback: &wayback,
         notes: &no_notes,
         osint: None,
+        ports: &ports,
+        tls: &tls,
+        vhosts: &vhosts,
+        discovery: &discovery,
+        screenshots: &screenshots,
     };
     report::write_all(&dir, &data)?;
     Ok(())
@@ -469,6 +509,16 @@ async fn cmd_recon(
 ) -> Result<()> {
     // One report per registrable domain, even when the user passes several
     // domains or a mixed host list.
+    let discovery_paths: Vec<String> = match &args.discovery_wordlist {
+        Some(path) => std::fs::read_to_string(path)
+            .with_context(|| format!("cannot read discovery wordlist {}", path.display()))?
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(str::to_string)
+            .collect(),
+        None => Vec::new(),
+    };
     let inputs = args.targets.hosts(scope)?;
     let mut groups: std::collections::BTreeMap<String, Vec<String>> =
         std::collections::BTreeMap::new();
@@ -503,6 +553,7 @@ async fn cmd_recon(
             group_args,
             &cancel,
             &[],
+            &discovery_paths,
         )
         .await
         {

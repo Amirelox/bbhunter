@@ -5,11 +5,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::crawl::CrawlResult;
+use crate::discovery::DiscoveryScan;
 use crate::findings::{Finding, Findings, Severity, Stage};
 use crate::osint;
 use crate::paths::PathScan;
+use crate::ports::PortScan;
 use crate::probe::HostResult;
+use crate::shots::Screenshot;
+use crate::tls::TlsScan;
 use crate::triage::{self, Triage};
+use crate::vhosts::VhostScan;
 
 const FONTS_CSS: &str = include_str!("../design/fonts.css");
 const TOKENS_CSS: &str = include_str!("../design/tokens.css");
@@ -28,6 +33,11 @@ pub struct ReportData<'a> {
     pub wayback: &'a BTreeSet<String>,
     pub notes: &'a [String],
     pub osint: Option<&'a osint::OsintReport>,
+    pub ports: &'a PortScan,
+    pub tls: &'a TlsScan,
+    pub vhosts: &'a VhostScan,
+    pub discovery: &'a DiscoveryScan,
+    pub screenshots: &'a [Screenshot],
 }
 
 // ---------------------------------------------------------------- helpers
@@ -229,6 +239,10 @@ fn stage_label(stage: Stage) -> &'static str {
         Stage::Probe => "sonda",
         Stage::Crawl => "crawl",
         Stage::Paths => "ścieżki",
+        Stage::Ports => "porty",
+        Stage::Tls => "TLS",
+        Stage::Vhosts => "vhosty",
+        Stage::Discovery => "discovery",
     }
 }
 
@@ -455,13 +469,20 @@ fn render_hosts(data: &ReportData) -> String {
 
     let mut rows = String::new();
     for h in primaries.iter().copied() {
-        let tech = if !h.services.is_empty() {
+        let mut tech = if !h.services.is_empty() {
             h.services.join(" · ")
         } else if h.tech.is_empty() {
             "—".to_string()
         } else {
             h.tech.join(" · ")
         };
+        if let Some(waf) = &h.waf {
+            tech = if tech == "—" {
+                format!("WAF/CDN: {waf}")
+            } else {
+                format!("{tech} · WAF/CDN: {waf}")
+            };
+        }
         let title = if h.status == 0 {
             "host bez HTTP".to_string()
         } else if h.title.is_empty() {
@@ -560,6 +581,275 @@ fn render_leads(data: &ReportData) -> String {
     }
     out.push_str("</div>");
     out
+}
+
+fn render_ports(data: &ReportData) -> String {
+    let scan = data.ports;
+    if scan.checked == 0 {
+        return String::new();
+    }
+    let rows = if scan.open.is_empty() {
+        String::new()
+    } else {
+        scan.open
+            .iter()
+            .map(|o| {
+                let banner = if o.banner.is_empty() {
+                    "—".to_string()
+                } else {
+                    esc(&o.banner)
+                };
+                format!(
+                    r#"<tr>
+  <td class="c-name"><span class="cell-name">{host}</span><span class="alias-note">{ip}</span></td>
+  <td class="c-status"><span class="status" data-class="2">{port}</span></td>
+  <td class="c-tech cell-tech">{service}</td>
+  <td class="c-title cell-title">{banner}</td>
+</tr>
+"#,
+                    host = esc(&o.host),
+                    ip = esc(&o.ip),
+                    port = o.port,
+                    service = esc(&o.service),
+                    banner = banner,
+                )
+            })
+            .collect::<String>()
+    };
+    let body = if scan.open.is_empty() {
+        r#"<div class="note"><p class="note__title">Brak otwartych portów</p><p class="note__body">TCP connect nie znalazł żadnej z wybranych usług. To nie dowodzi, że host jest zamknięty — firewall może odrzucać połączenia.</p></div>"#.to_string()
+    } else {
+        format!(
+            r#"<table class="hosts">
+  <caption class="sr-only">Otwarte porty i usługi</caption>
+  <thead><tr><th scope="col" class="c-name">Host</th><th scope="col" class="c-status">Port</th><th scope="col" class="c-tech">Usługa</th><th scope="col" class="c-title">Banner</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"#
+        )
+    };
+    format!(
+        r#"<section class="block" aria-labelledby="ports-title">
+  <div class="block__head"><h2 id="ports-title"><span class="tick" aria-hidden="true"></span>Usługi sieciowe</h2><p class="block__meta">{open} / {checked}</p></div>
+  {body}
+</section>"#,
+        open = scan.open.len(),
+        checked = scan.checked,
+        body = body,
+    )
+}
+
+fn render_tls(data: &ReportData) -> String {
+    let scan = data.tls;
+    if scan.checked == 0 {
+        return String::new();
+    }
+    let rows = scan
+        .results
+        .iter()
+        .map(|t| {
+            let mut flags = String::new();
+            for version in &t.weak_versions {
+                flags.push_str(&format!(
+                    "<span class=\"tag tag--warn\">{}</span>",
+                    esc(version)
+                ));
+            }
+            if t.expired {
+                flags.push_str("<span class=\"tag tag--bad\">wygasł</span>");
+            }
+            if !t.hostname_match {
+                flags.push_str("<span class=\"tag tag--warn\" title=\"Certyfikat nie obejmuje tego hosta\">host</span>");
+            }
+            let san = if t.san.is_empty() {
+                "—".to_string()
+            } else {
+                let first: Vec<&str> = t.san.iter().take(2).map(String::as_str).collect();
+                let extra = t.san.len().saturating_sub(2);
+                format!(
+                    "{} <span class=\"alias-note\">wystawca: {}{} · wygasa {}</span>",
+                    esc(&first.join(", ")),
+                    esc(if t.issuer.is_empty() { "—" } else { &t.issuer }),
+                    if extra > 0 {
+                        format!(" · +{extra}")
+                    } else {
+                        String::new()
+                    },
+                    esc(&t.expires)
+                )
+            };
+            format!(
+                r#"<tr>
+  <td class="c-name"><span class="cell-name">{host}</span><span class="alias-note">{ip}:{port}</span></td>
+  <td class="c-status"><span class="status" data-class="2">{version}</span>{flags}</td>
+  <td class="c-tech cell-tech">{cipher}</td>
+  <td class="c-title cell-title">{san}</td>
+</tr>
+"#,
+                host = esc(&t.host),
+                ip = esc(&t.ip),
+                port = t.port,
+                version = esc(&t.version),
+                flags = flags,
+                cipher = esc(&t.cipher),
+                san = san,
+            )
+        })
+        .collect::<String>();
+    let body = if scan.results.is_empty() {
+        r#"<div class="note"><p class="note__title">Brak odpowiedzi TLS</p><p class="note__body">Żaden z badanych hostów nie ukończył handshake na porcie 443. To może być HTTP, firewall albo brak SNI.</p></div>"#.to_string()
+    } else {
+        format!(
+            r#"<table class="hosts">
+  <caption class="sr-only">Certyfikaty i negocjowane parametry TLS</caption>
+  <thead><tr><th scope="col" class="c-name">Host</th><th scope="col" class="c-status">TLS</th><th scope="col" class="c-tech">Szyfr</th><th scope="col" class="c-title">SAN i ważność</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"#
+        )
+    };
+    format!(
+        r#"<section class="block" aria-labelledby="tls-title">
+  <div class="block__head"><h2 id="tls-title"><span class="tick" aria-hidden="true"></span>TLS i certyfikaty</h2><p class="block__meta">{n} / {checked}</p></div>
+  {body}
+</section>"#,
+        n = scan.results.len(),
+        checked = scan.checked,
+        body = body,
+    )
+}
+
+fn render_vhosts(data: &ReportData) -> String {
+    let scan = data.vhosts;
+    if scan.checked == 0 {
+        return String::new();
+    }
+    let body = if scan.hits.is_empty() {
+        r#"<div class="note"><p class="note__title">Brak wirtualnych hostów</p><p class="note__body">Host header nie zwrócił innej odpowiedzi niż bazowy host. To nie wyklucza vhostów wymagających SNI lub autoryzacji.</p></div>"#.to_string()
+    } else {
+        let rows = scan
+            .hits
+            .iter()
+            .map(|h| {
+                format!(
+                    r#"<tr>
+  <td class="c-name"><span class="cell-name">{candidate}</span><span class="alias-note">{host}</span></td>
+  <td class="c-status"><span class="status" data-class="{cls}">{status}</span></td>
+  <td class="c-tech cell-tech">{ip}:{port}</td>
+  <td class="c-title cell-title">{title}</td>
+</tr>
+"#,
+                    candidate = esc(&h.candidate),
+                    host = esc(&h.host),
+                    cls = status_class(h.status),
+                    status = h.status,
+                    ip = esc(&h.ip),
+                    port = h.port,
+                    title = if h.title.is_empty() {
+                        "—".to_string()
+                    } else {
+                        esc(&h.title)
+                    },
+                )
+            })
+            .collect::<String>();
+        format!(
+            r#"<table class="hosts">
+  <caption class="sr-only">Wirtualne hosty na wspólnych adresach IP</caption>
+  <thead><tr><th scope="col" class="c-name">Host</th><th scope="col" class="c-status">HTTP</th><th scope="col" class="c-tech">IP</th><th scope="col" class="c-title">Tytuł</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"#
+        )
+    };
+    format!(
+        r#"<section class="block" aria-labelledby="vhosts-title">
+  <div class="block__head"><h2 id="vhosts-title"><span class="tick" aria-hidden="true"></span>Wirtualne hosty</h2><p class="block__meta">{n} / {checked}</p></div>
+  {body}
+</section>"#,
+        n = scan.hits.len(),
+        checked = scan.checked,
+        body = body,
+    )
+}
+
+fn render_discovery(data: &ReportData) -> String {
+    let scan = data.discovery;
+    if scan.checked == 0 {
+        return String::new();
+    }
+    let body = if scan.hits.is_empty() {
+        r#"<div class="note"><p class="note__title">Brak trafień content discovery</p><p class="note__body">Żadna ścieżka z listy nie różniła się od soft-404. Zwiększ listę albo sprawdź host ręcznie.</p></div>"#.to_string()
+    } else {
+        let rows = scan
+            .hits
+            .iter()
+            .map(|h| {
+                let title = format!(
+                    "{} · {} B",
+                    if h.title.is_empty() { "—" } else { &h.title },
+                    h.size
+                );
+                format!(
+                    r#"<tr>
+  <td class="c-name">{link}</td>
+  <td class="c-status"><span class="status" data-class="{cls}">{status}</span></td>
+  <td class="c-tech cell-tech">{kind}</td>
+  <td class="c-title cell-title">{title}</td>
+</tr>
+"#,
+                    link = link(&h.url, &h.url),
+                    cls = status_class(h.status),
+                    status = h.status,
+                    kind = esc(&h.kind),
+                    title = title,
+                )
+            })
+            .collect::<String>();
+        format!(
+            r#"<table class="hosts">
+  <caption class="sr-only">Trafienia content discovery</caption>
+  <thead><tr><th scope="col" class="c-name">URL</th><th scope="col" class="c-status">HTTP</th><th scope="col" class="c-tech">Typ</th><th scope="col" class="c-title">Tytuł</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"#
+        )
+    };
+    format!(
+        r#"<section class="block" aria-labelledby="discovery-title">
+  <div class="block__head"><h2 id="discovery-title"><span class="tick" aria-hidden="true"></span>Content discovery</h2><p class="block__meta">{n} / {checked}</p></div>
+  {body}
+</section>"#,
+        n = scan.hits.len(),
+        checked = scan.checked,
+        body = body,
+    )
+}
+
+fn render_screenshots(data: &ReportData) -> String {
+    if data.screenshots.is_empty() {
+        return String::new();
+    }
+    let shots = data
+        .screenshots
+        .iter()
+        .map(|s| {
+            format!(
+                r#"<figure class="shot">
+  <p class="shot__host"><span class="cell-name">{host}</span><span class="alias-note">{url}</span></p>
+  <a href="{file}" rel="noreferrer"><img src="data:image/jpeg;base64,{thumb}" alt="Zrzut ekranu {host}" loading="lazy"></a>
+</figure>"#,
+                host = esc(&s.host),
+                url = esc(&s.url),
+                file = esc(&s.file),
+                thumb = s.thumb,
+            )
+        })
+        .collect::<String>();
+    format!(
+        r#"<section class="block" aria-labelledby="shots-title">
+  <div class="block__head"><h2 id="shots-title"><span class="tick" aria-hidden="true"></span>Zrzuty ekranu</h2><p class="block__meta">{n}</p></div>
+  <div class="shots">{shots}</div>
+</section>"#,
+        n = data.screenshots.len(),
+        shots = shots,
+    )
 }
 
 fn render_rail(data: &ReportData, urls: &BTreeSet<String>) -> String {
@@ -684,6 +974,32 @@ fn render_rail(data: &ReportData, urls: &BTreeSet<String>) -> String {
   <p class="rail__label"><span class="tick" aria-hidden="true"></span>OSINT</p>
   <ul class="rows">
 {html}  </ul>
+</section>"#
+        ));
+    }
+
+    // Moduły powierzchni
+    let module_rows = [
+        ("otwarte porty", data.ports.open.len()),
+        ("hosty TLS", data.tls.results.len()),
+        ("wirtualne hosty", data.vhosts.hits.len()),
+        ("content discovery", data.discovery.hits.len()),
+        ("zrzuty ekranu", data.screenshots.len()),
+    ];
+    if module_rows.iter().any(|(_, n)| *n > 0) {
+        let mut rows = String::new();
+        for (label, n) in module_rows {
+            if n > 0 {
+                rows.push_str(&format!(
+                    "<li><span>{label}</span><span class=\"n\">{n}</span></li>\n"
+                ));
+            }
+        }
+        out.push_str(&format!(
+            r#"<section aria-label="Moduły">
+  <p class="rail__label"><span class="tick" aria-hidden="true"></span>Moduły</p>
+  <ul class="rows">
+{rows}  </ul>
 </section>"#
         ));
     }
@@ -1013,6 +1329,12 @@ fn html(data: &ReportData) -> String {
       {ledger}
     </section>
 
+    {screenshots_section}
+    {ports_section}
+    {tls_section}
+    {vhosts_section}
+    {discovery_section}
+
     <section class="block" aria-labelledby="hosts-title">
       <div class="block__head">
         <h2 id="hosts-title"><span class="tick" aria-hidden="true"></span>Hosty</h2>
@@ -1053,6 +1375,11 @@ fn html(data: &ReportData) -> String {
         trace = render_trace(data),
         total = total,
         ledger = render_ledger(data),
+        screenshots_section = render_screenshots(data),
+        ports_section = render_ports(data),
+        tls_section = render_tls(data),
+        vhosts_section = render_vhosts(data),
+        discovery_section = render_discovery(data),
         hosts = render_hosts(data),
         leads = render_leads(data),
         leads_n = data.triage.total(),
@@ -1192,6 +1519,56 @@ fn markdown(data: &ReportData) -> String {
         md.push_str("- Szczegóły: `osint/osint.md`\n\n");
     }
 
+    if !data.ports.open.is_empty() {
+        md.push_str("## Usługi sieciowe\n\n");
+        for p in &data.ports.open {
+            md.push_str(&format!(
+                "- `{}:{}` {} {}\n",
+                p.host, p.port, p.service, p.banner
+            ));
+        }
+        md.push('\n');
+    }
+    if !data.tls.results.is_empty() {
+        md.push_str("## TLS\n\n");
+        for t in &data.tls.results {
+            md.push_str(&format!(
+                "- `{}` {} / {}{}\n",
+                t.host,
+                t.version,
+                t.cipher,
+                if t.weak_versions.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (słabe: {})", t.weak_versions.join(", "))
+                }
+            ));
+        }
+        md.push('\n');
+    }
+    if !data.vhosts.hits.is_empty() {
+        md.push_str("## Wirtualne hosty\n\n");
+        for v in &data.vhosts.hits {
+            md.push_str(&format!(
+                "- {} (HTTP {}) — {}\n",
+                v.candidate, v.status, v.title
+            ));
+        }
+        md.push('\n');
+    }
+    if !data.discovery.hits.is_empty() {
+        md.push_str("## Content discovery\n\n");
+        for h in &data.discovery.hits {
+            md.push_str(&format!("- {} (HTTP {}, {})\n", h.url, h.status, h.kind));
+        }
+        md.push('\n');
+    }
+    if !data.screenshots.is_empty() {
+        md.push_str(&format!(
+            "## Zrzuty ekranu\n\n{} plików w `screenshots/`.\n\n",
+            data.screenshots.len()
+        ));
+    }
     md.push_str("## Co dalej\n\n");
     md.push_str("1. Potwierdź każdy wysoki i średni wiersz ręcznie w Burpie.\n");
     md.push_str("2. Zacznij od `interesting/auth-endpoints.txt`, `interesting/admin-panels.txt` i endpointów API.\n");
@@ -1250,6 +1627,45 @@ pub fn write_all(outdir: &Path, data: &ReportData) -> Result<PathBuf> {
         })
         .collect();
     write_list(&outdir.join("live_hosts.txt"), live_lines.iter())?;
+    write_list(
+        &outdir.join("ports.txt"),
+        data.ports.open.iter().map(|p| {
+            format!(
+                "{}\t{}\t{}\t{}\t{}",
+                p.host, p.ip, p.port, p.service, p.banner
+            )
+        }),
+    )?;
+    fs::write(
+        outdir.join("ports.json"),
+        serde_json::to_string_pretty(&data.ports.open)?,
+    )?;
+    write_list(
+        &outdir.join("vhosts.txt"),
+        data.vhosts
+            .hits
+            .iter()
+            .map(|v| format!("{}\t{}\t{}\t{}", v.candidate, v.ip, v.status, v.title)),
+    )?;
+    write_list(
+        &outdir.join("discovery.txt"),
+        data.discovery
+            .hits
+            .iter()
+            .map(|h| format!("{}\t{}\t{}\t{}", h.status, h.kind, h.url, h.title)),
+    )?;
+    fs::write(
+        outdir.join("tls.json"),
+        serde_json::to_string_pretty(&data.tls.results)?,
+    )?;
+    fs::write(
+        outdir.join("discovery.json"),
+        serde_json::to_string_pretty(&data.discovery.hits)?,
+    )?;
+    fs::write(
+        outdir.join("vhosts.json"),
+        serde_json::to_string_pretty(&data.vhosts.hits)?,
+    )?;
 
     let mut jsonl = String::new();
     for h in data.hosts {
@@ -1293,6 +1709,11 @@ pub fn write_all(outdir: &Path, data: &ReportData) -> Result<PathBuf> {
             "findings_medium": c[1],
             "findings_low": c[2],
             "findings_info": c[3],
+            "ports_open": data.ports.open.len(),
+            "tls_hosts": data.tls.results.len(),
+            "vhosts": data.vhosts.hits.len(),
+            "discovery_hits": data.discovery.hits.len(),
+            "screenshots": data.screenshots.len(),
         }
     });
     fs::write(
@@ -1309,6 +1730,21 @@ pub fn write_all(outdir: &Path, data: &ReportData) -> Result<PathBuf> {
         data.crawl.js.len(),
         data.crawl.secrets.len()
     );
+    if !data.ports.open.is_empty()
+        || !data.tls.results.is_empty()
+        || !data.vhosts.hits.is_empty()
+        || !data.discovery.hits.is_empty()
+        || !data.screenshots.is_empty()
+    {
+        println!(
+            "  modules: {} ports · {} TLS · {} vhosts · {} discovery · {} screenshots",
+            data.ports.open.len(),
+            data.tls.results.len(),
+            data.vhosts.hits.len(),
+            data.discovery.hits.len(),
+            data.screenshots.len()
+        );
+    }
     println!(
         "  findings: {} high, {} medium, {} low, {} info",
         c[0], c[1], c[2], c[3]

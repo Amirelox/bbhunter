@@ -1,12 +1,13 @@
 # bbhunter
 
 All-in-one recon toolkit for bug bounty and pentests, **on targets you are allowed to test**.
-One binary: passive subdomains → HTTP probe → crawl/JS → well-known paths → triage → report
-(Markdown + HTML + JSON), plus a local browser app and an OSINT stage.
+One binary: OSINT → subdomains → HTTP probe → crawl/JS → well-known paths → ports/TLS →
+surface modules (vhosts, content discovery, screenshots) → triage → report (Markdown + HTML + JSON),
+plus a local browser app.
 
-> This is not an exploit framework. It does recon and low-impact configuration checks
-> (single GETs on well-known paths, headers, cookies, CORS). Every result is a lead for
-> manual verification, not a confirmed vulnerability.
+> This is not an exploit framework. It sends no payloads: TCP connects, HTTP requests, Host
+> header probes and one GET per discovered path. Every result is a lead for manual
+> verification, not a confirmed vulnerability. Optional active modules are yours to enable.
 
 ## Safety and scope
 
@@ -32,8 +33,11 @@ cargo build --release          # binary: target/release/bbhunter
 cargo install --path .         # or into ~/.cargo/bin
 ```
 
-Stable Rust (tested on 1.94). Network access to crt.sh, hackertarget, OTX, urlscan and
-web.archive.org is required; some sources may be temporarily unavailable while the rest still work.
+Stable Rust (tested on 1.94). TLS analysis links OpenSSL; on Debian/Ubuntu install
+`libssl-dev pkg-config`. Screenshots need Chromium (`chromium`, `google-chrome`, or
+`BBHUNTER_CHROME=/path/to/chrome`); without it the stage is skipped with a report note. Network
+access to crt.sh, hackertarget, OTX, urlscan and web.archive.org is required; some sources may be
+temporarily unavailable while the rest still work.
 
 ## Quick start
 
@@ -51,6 +55,12 @@ bbhunter recon -l targets.txt --scope scope.txt
 # quick pass (higher rate, shallow crawl)
 bbhunter recon -d example.com --scope scope.txt --profile fast
 
+# surface modules: ports + TLS by default; opt in to vhosts, discovery, screenshots
+bbhunter recon -d example.com --scope scope.txt --vhosts --discovery --screenshots
+
+# a quiet HTTP-only pass
+bbhunter recon -d example.com --scope scope.txt --no-ports --no-tls
+
 # single stages
 bbhunter subs  -d example.com --scope scope.txt > subs.txt
 bbhunter probe -l subs.txt --scope scope.txt
@@ -64,7 +74,7 @@ defaults), `deep` (80 pages, depth 3). Explicit non-default flags win. Every run
 per-stage timing line:
 
 ```
-czasy: OSINT 1.2s · DNS 0.4s · probe 8.1s · crawl 24.0s · paths 6.3s · enrich 2.0s · razem 42.0s
+czasy: OSINT 1.2s · DNS 0.4s · probe 8.1s · crawl 24.0s · paths 6.3s · moduły 7.4s · enrich 2.0s · razem 49.4s
 ```
 
 Global flags: `--concurrency` (20), `--rate` req/s (25), `--timeout` (10 s), `-o/--out`, `-q`,
@@ -83,13 +93,18 @@ bbhunter recon -d example.com --scope scope.txt \
 | Stage | Module | Description |
 |---|---|---|
 | 1. Subdomains | `subs.rs` | crt.sh, hackertarget, AlienVault OTX, urlscan + optional brute force (built-in ~230-word list plus your own) with wildcard DNS detection |
-| 2. Probe | `probe.rs` | HTTPS→HTTP fallback, status, title, tech fingerprint, IP/CNAME, header audit, cookies, CORS, error/stack-trace leaks |
+| 2. Probe | `probe.rs` | HTTPS→HTTP fallback, status, title, tech fingerprint, WAF/CDN inference, IP/CNAME, header audit, cookies, CORS, error/stack-trace leaks |
 | 3. Crawl | `crawl.rs` | same-host BFS, links/iframes/forms, JS bundles, endpoint extraction, secret regexes (AWS, Stripe, Google, GitHub, JWT, private keys, generic `api_key=`) |
 | 4. Paths | `paths.rs` | fixed well-known list, one GET each: `.git`, `.env`, `.DS_Store`, `.svn`, `robots.txt`, `sitemap.xml`, `security.txt`, `server-status`, `phpinfo`, `actuator/*`, `metrics`, swagger/openapi, GraphQL, OIDC |
 | 5. Wayback | `wayback.rs` | CDX API → historical URLs (filtered to scope) |
 | 6. Triage | `triage.rs` | buckets: admin-panels, debug-staging, auth-endpoints, api-endpoints, payment-checkout, file-upload, redirect-params, urls-with-params, user-account |
 | 7. Recursion | `pipeline.rs` | A host found in a link, JS file, robots/sitemap or redirect joins the next round and goes through the same stages. Bounded by `--depth` (2), `--max-hosts` (500); `--no-recurse` disables it |
-| 8. Report | `report.rs` | `report.md`, `report.html`, `findings.json`, `hosts.jsonl`, per-bucket files |
+| 8. Ports | `ports.rs` | async TCP connect scan + banner grab (34 common services); risky databases/admin ports become findings. `--no-ports`, `--ports 22,80,443,8000-8100` |
+| 9. TLS | `tls.rs` | certificate SANs, issuer, expiry, negotiated version/cipher, TLS 1.0/1.1 and weak-cipher checks. `--no-tls` |
+| 10. Virtual hosts | `vhosts.rs` | scope-filtered Host-header brute force against shared IPs; status/title/length comparison with the baseline. `--vhosts` |
+| 11. Content discovery | `discovery.rs` | soft-404-aware directory/file brute force, backups, configs, admin panels. `--discovery`, `--discovery-wordlist FILE` |
+| 12. Screenshots | `shots.rs` | optional headless Chromium capture; thumbnails are embedded in the report, full PNGs land in `screenshots/`. `--screenshots` |
+| 13. Report | `report.rs` | `report.md`, `report.html`, `findings.json`, `hosts.jsonl`, module artifacts and per-bucket files |
 
 Performance notes: pages inside a site are fetched in parallel batches, path checks run four at a
 time per host, passive sources are concurrent and cached for 24 h, aliases are crawled once, and
@@ -110,6 +125,25 @@ path-checked again. Findings with the same title and category are grouped in the
 (“Brak CSP — 23 hosty”), so the ledger shows signal instead of repetition. Hosts that answer on
 21/25/143 but not on HTTP are counted as non-HTTP services, not as “no response”.
 
+### Surface modules
+
+Port scan and TLS analysis run by default; virtual-host brute force, content discovery and
+screenshots are opt-in. All of them work only on hosts that already passed the allowlist, and
+virtual-host candidates are checked against the scope before a request is sent.
+
+| Module | Default | Artifacts | Limit / caveat |
+|---|---|---|---|
+| Ports | on | `ports.txt`, `ports.json` | async TCP connect, not raw SYN; 20 hosts, 34 common ports (or `--ports`) |
+| TLS | on | `tls.json` | OpenSSL; certificates are accepted without validation for analysis; weak versions are attempted separately |
+| WAF/CDN | always | `hosts.jsonl` (`waf`) | passive header/cookie/body signatures only |
+| Fingerprinting | always | `hosts.jsonl`, report | headers, cookies, body markers, crawled static/JS/CSS URLs |
+| Virtual hosts | off | `vhosts.txt`, `vhosts.json` | 8 hosts; Host header only; HTTPS vhosts can need SNI |
+| Content discovery | off | `discovery.txt`, `discovery.json` | 10 hosts, built-in list or `--discovery-wordlist`; soft-404 baseline |
+| Screenshots | off | `screenshots/*.png` | Chromium; set `BBHUNTER_CHROME` or install `chromium`; browser also loads page subresources |
+
+The desktop build needs OpenSSL headers for TLS analysis. Screenshots are skipped with a report
+note when Chromium is not found.
+
 ## Output layout
 
 Every registrable domain gets its own directory and report, even when `recon` receives a mixed
@@ -129,6 +163,11 @@ out/<target>/
 ├── js_files.txt
 ├── forms.txt
 ├── secrets.txt                  # redacted by default (--show-secrets for full values)
+├── ports.txt / ports.json       # open TCP services and banners
+├── tls.json                     # certificates, SANs, versions and ciphers
+├── vhosts.txt / vhosts.json     # Host-header discoveries
+├── discovery.txt / discovery.json
+├── screenshots/                 # optional full PNG captures
 ├── run.log                      # raw log (web scans)
 ├── triage.json                  # finding status and notes (web app)
 ├── osint/                       # when OSINT ran
@@ -162,7 +201,7 @@ out/<target>/
 | Findings | severity/status filters, search, detail drawer with evidence, triage and notes |
 | OSINT | RDAP, ASN, cloud candidates, favicons, dorks, public code |
 | Reports | HTML/Markdown/JSON, A4 print, issue template copied to the clipboard |
-| Modules | stage toggles and custom paths; a rule DSL is planned |
+| Modules | port/TLS/vhost/discovery/screenshot switches, custom paths, passive WAF/tech status |
 | Settings | rate, concurrency, timeout, limits, proxy, API key status |
 | Logs | raw log of the latest or selected run |
 
@@ -247,12 +286,13 @@ site/
 ├── site.css                   # one section per screen, product-first layout
 ├── site.js                    # mobile menu, copy command, one hero scan sequence
 └── assets/
-    └── przyklad-raportu.html  # full, working offline report (embedded in the page)
+    ├── przyklad-raportu.html  # full, working offline report (embedded in the page)
+    └── screenshots/           # full PNGs referenced by the example report
 ```
 
 The page shows the product rather than screenshots: a live HTML console runs a demo scan once on
-load, the report section embeds the real report, and the OSINT section is a small SVG map with
-animated pulses. Motion is limited to the hero entrance, that scan, the map and hover states; all
+load, the pipeline section lists the surface modules, the report section embeds the real report,
+and the OSINT section is a small SVG map with animated pulses. Motion is limited to the hero entrance, that scan, the map and hover states; all
 of it is disabled under `prefers-reduced-motion`.
 
 ```bash

@@ -29,7 +29,7 @@
     findings: { title: "Znaleziska", sub: "Kolejka triage’u: waga, host, etap i status.", crumb: "workspace / znaleziska" },
     osint: { title: "OSINT", sub: "RDAP, ASN, favicony, powiązania i źródła publiczne.", crumb: "workspace / osint" },
     reports: { title: "Raporty", sub: "Gotowe raporty offline w HTML, Markdown i JSON.", crumb: "workspace / raporty" },
-    modules: { title: "Moduły i reguły", sub: "Etapy domyślne i stały zestaw sprawdzeń silnika.", crumb: "workspace / system" },
+    modules: { title: "Moduły i reguły", sub: "Porty, TLS, wirtualne hosty, discovery i stały zestaw sprawdzeń.", crumb: "workspace / system" },
     settings: { title: "Ustawienia", sub: "Limity, proxy i klucze źródeł.", crumb: "workspace / system" },
     logs: { title: "Logi", sub: "Surowy przebieg skanu, linia po linii.", crumb: "workspace / system" },
   };
@@ -40,8 +40,10 @@
     ["probe", "Probe"],
     ["crawl", "Crawl"],
     ["paths", "Ścieżki"],
+    ["modules", "Moduły"],
   ];
   const SEV = { high: "wysokie", medium: "średnie", low: "niskie", info: "informacyjne" };
+  const STAGE = { probe: "sonda", crawl: "crawl", paths: "ścieżki", ports: "porty", tls: "TLS", vhosts: "vhosty", discovery: "discovery" };
   const SEV_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
   const STATUS = { running: "w toku", done: "gotowe", error: "błąd", stopped: "zatrzymany" };
   const FIND_RE = /^\[!\]\s+(high|medium|low|info)\s{2,}(.+?)\s{2,}(\S+)\s*$/;
@@ -747,7 +749,7 @@
           <td><a class="finding-title" href="#" data-action="finding" data-run="${esc(findingsState.run)}" data-key="${esc(fkey(x))}">${esc(x.title)}</a>
             <span class="finding-url">${esc(x.url)}</span><span class="finding-host">${esc(x.host)} · ${esc(x.stage || "")}</span></td>
           <td class="mono-cell">${esc(x.host)}</td>
-          <td class="mono-cell">${esc(x.stage || "")}</td>
+          <td class="mono-cell">${esc(STAGE[x.stage] || x.stage || "")}</td>
           <td><span class="status" data-status="${esc((findingsState.triage[fkey(x)] || {}).status || "nowe")}">${esc((findingsState.triage[fkey(x)] || {}).status || "nowe")}</span></td></tr>`
         )
         .join("")}</tbody></table></div>`;
@@ -975,18 +977,42 @@
 
   function modulesHtml() {
     const s = S.settings || {};
-    const on = (v) => (v === false ? "" : " checked");
+    const onByDefault = (v) => (v === false ? "" : " checked");
+    const optIn = (v) => (v ? " checked" : "");
+    const row = (id, title, desc, checked, badge = "") => {
+      const tag = badge ? "div" : "label";
+      return `<${tag} class="module"><div class="module__text"><strong>${title}</strong><span>${desc}</span></div>${
+        badge ? `<span class="badge is-on">${badge}</span>` : `<input class="switch" type="checkbox" id="${id}" role="switch" aria-label="${title}"${checked}>`
+      }</${tag}>`;
+    };
     return `<div class="split">
-      <section class="panel"><div class="panel__head"><div><p class="eyebrow">Domyślne</p><h2>Etapy przebiegu</h2></div><span class="meta">nowe skany</span></div>
+      <section class="panel"><div class="panel__head"><div><p class="eyebrow">Nowe skany</p><h2>Moduły zbierania</h2></div><span class="meta">zapisywane</span></div>
         <form id="modules-form">
           <div class="module-list">
-            <div class="module"><div class="module__text"><strong>OSINT</strong><span>RDAP, ASN, archiwa, chmura, favicony i dorki. Startuje przed probem.</span></div><input class="switch" type="checkbox" id="m-osint" role="switch" aria-label="OSINT"${on(s.osint)}></div>
-            <div class="module"><div class="module__text"><strong>Rekurencja</strong><span>Nowe hosty wchodzą do kolejnej rundy, dopóki mieszczą się w limicie.</span></div><input class="switch" type="checkbox" id="m-recurse" role="switch" aria-label="Rekurencja"${on(s.recursion)}></div>
-            <div class="module"><div class="module__text"><strong>Ścieżki well-known</strong><span>Bezpieczne pliki i katalogi sprawdzane jednym GET-em, bez walidacji treści.</span></div><input class="switch" type="checkbox" id="m-paths" role="switch" aria-label="Ścieżki"${on(s.paths)}></div>
+            ${row("m-ports", "Skan portów i usług", "Async TCP connect na wspólnym zestawie portów, banner grabbing dla HTTP, SSH, FTP, SMTP i baz danych. To connect scan, nie surowy SYN — nie wymaga roota.", onByDefault(s.ports))}
+            ${row("m-tls", "TLS i certyfikaty", "SAN, wystawca, ważność, negocjowana wersja i szyfr. Osobno sprawdzane przestarzałe TLS 1.0/1.1 oraz słabe szyfry.", onByDefault(s.tls))}
+            ${row("m-vhosts", "Wirtualne hosty", "Host header na wspólnym IP: typowe etykiety, porównanie statusu, tytułu i rozmiaru z odpowiedzią bazową. Tylko hosty w zakresie.", optIn(s.vhosts))}
+            ${row("m-discovery", "Content discovery", "Brute-force katalogów i plików z soft-404, rozszerzeniami backupów i limitem hostów. Osobny od stałej listy well-known.", optIn(s.discovery))}
+            ${row("m-shots", "Zrzuty ekranu", "Headless Chromium na żywych hostach; miniatury trafiają do raportu, pełne PNG do katalogu screenshots/. Wymaga Chromium.", optIn(s.screenshots))}
           </div>
-          <div class="field" style="margin-block-start:16px"><label for="m-extra">Własne ścieżki</label>
-            <textarea id="m-extra" spellcheck="false" placeholder="/internal/debug&#10;/.well-known/security.txt">${esc((s.extra_paths || []).join("\n"))}</textarea>
-            <p class="hint">Jedna ścieżka na linię, musi zaczynać się od <span class="mono">/</span>. Sprawdzana jednym GET-em.</p></div>
+          <div class="form-grid" style="margin-block-start:16px">
+            <div class="field"><label for="m-ports-list">Porty</label><input id="m-ports-list" type="text" value="${esc(s.ports_list || "")}" placeholder="puste = wspólny zestaw 34 portów" autocomplete="off" spellcheck="false"><p class="hint">Zakresy dozwolone: <span class="mono">80,443,8000-8100</span>.</p></div>
+            <div class="field"><label for="m-extra">Własne ścieżki well-known</label><textarea id="m-extra" spellcheck="false" placeholder="/internal/debug&#10;/.well-known/security.txt">${esc((s.extra_paths || []).join("\n"))}</textarea><p class="hint">Jedna ścieżka na linię, musi zaczynać się od <span class="mono">/</span>.</p></div>
+          </div>
+          <div class="field" style="margin-block-start:12px"><label for="m-discovery-paths">Własna lista content discovery</label>
+            <textarea id="m-discovery-paths" spellcheck="false" placeholder="/admin/&#10;/backup.zip&#10;api/docs">${esc((s.discovery_paths || []).join("\n"))}</textarea>
+            <p class="hint">Puste = wbudowana lista. Wpisy bez <span class="mono">/</span> dostaną go automatycznie.</p></div>
+          <p class="eyebrow" style="margin-block-start:18px">Fundament</p>
+          <div class="module-list">
+            ${row("m-osint", "OSINT", "RDAP, ASN, archiwa, chmura, favicony i dorki. Startuje przed probe, wzbogacanie po probe.", onByDefault(s.osint))}
+            ${row("m-recurse", "Rekurencja", "Nowe hosty wchodzą do kolejnej rundy, dopóki mieszczą się w limicie.", onByDefault(s.recursion))}
+            ${row("m-paths", "Ścieżki well-known", "Stała lista bezpiecznych plików i katalogów sprawdzana jednym GET-em.", onByDefault(s.paths))}
+          </div>
+          <p class="eyebrow" style="margin-block-start:18px">Pasywne, zawsze aktywne</p>
+          <div class="module-list">
+            ${row("", "Fingerprinting technologii", "Nagłówki, cookies, wzorce HTML oraz pliki JS/CSS i ścieżki statyczne z crawla.", "", "zawsze")}
+            ${row("", "WAF / CDN", "Cloudflare, Akamai, CloudFront, Imperva, Fastly, Azure Front Door, F5 i inne — po nagłówkach, cookies i treści.", "", "zawsze")}
+          </div>
           <div class="form-actions"><button class="btn btn--primary" type="submit">Zapisz moduły</button></div>
         </form>
       </section>
@@ -997,19 +1023,28 @@
           <li>Wystawione pliki well-known i konfiguracje</li>
           <li>Sekrety w publicznym JavaScripcie</li>
           <li>Technologie i wersje w odpowiedziach</li>
+          <li>WAF/CDN po sygnaturach odpowiedzi</li>
         </ul>
-        <div class="section-note"><strong>DSL własnych reguł jest zaplanowany.</strong> Silnik nie udaje, że działa — poniżej lista realnych sprawdzeń. Własne ścieżki to pierwszy krok.</div>
+        <div class="section-note"><strong>Aktywne moduły są opcjonalne poza portami i TLS.</strong> Port scan to connect scan, więc nie wymaga raw sockets. Zrzuty ekranu uruchamiają Chromium dla stron w zakresie, ale przeglądarka ładuje też ich zasoby — traktuj to jak wizytę w przeglądarce. DSL własnych reguł jest nadal zaplanowany.</div>
       </section>
     </div>`;
   }
 
   async function saveModules() {
+    const lines = (id) => $(id).value.split("\n").map((x) => x.trim()).filter(Boolean);
     const settings = {
       ...(S.settings || {}),
+      ports: $("#m-ports").checked,
+      ports_list: $("#m-ports-list").value.trim(),
+      tls: $("#m-tls").checked,
+      vhosts: $("#m-vhosts").checked,
+      discovery: $("#m-discovery").checked,
+      discovery_paths: lines("#m-discovery-paths"),
+      screenshots: $("#m-shots").checked,
       osint: $("#m-osint").checked,
       recursion: $("#m-recurse").checked,
       paths: $("#m-paths").checked,
-      extra_paths: $("#m-extra").value.split("\n").map((x) => x.trim()).filter((x) => x.startsWith("/")),
+      extra_paths: lines("#m-extra").filter((x) => x.startsWith("/")),
     };
     await putSettings(settings);
   }
@@ -1132,7 +1167,7 @@
           <dt>Waga</dt><dd><span class="sev" data-sev="${esc(f.severity)}">${SEV[f.severity] || f.severity}</span></dd>
           <dt>Kategoria</dt><dd class="mono">${esc(f.category || "—")}</dd>
           <dt>Host</dt><dd class="mono">${esc(f.host)}</dd>
-          <dt>Etap</dt><dd class="mono">${esc(f.stage || "—")}</dd>
+          <dt>Etap</dt><dd class="mono">${esc(STAGE[f.stage] || f.stage || "—")}</dd>
           <dt>URL</dt><dd><a class="link" href="${esc(f.url)}" target="_blank" rel="noreferrer">${esc(f.url)}</a></dd>
         </dl>
         <div><p class="field__label" style="margin-block-end:8px">Dowód</p>

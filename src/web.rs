@@ -41,6 +41,20 @@ struct Settings {
     proxy: Option<String>,
     #[serde(default)]
     extra_paths: Vec<String>,
+    #[serde(default = "default_true")]
+    ports: bool,
+    #[serde(default)]
+    ports_list: String,
+    #[serde(default = "default_true")]
+    tls: bool,
+    #[serde(default)]
+    vhosts: bool,
+    #[serde(default)]
+    discovery: bool,
+    #[serde(default)]
+    discovery_paths: Vec<String>,
+    #[serde(default)]
+    screenshots: bool,
 }
 
 impl Default for Settings {
@@ -57,6 +71,13 @@ impl Default for Settings {
             paths: true,
             proxy: None,
             extra_paths: Vec::new(),
+            ports: true,
+            ports_list: String::new(),
+            tls: true,
+            vhosts: false,
+            discovery: false,
+            discovery_paths: Vec::new(),
+            screenshots: false,
         }
     }
 }
@@ -309,6 +330,22 @@ async fn api_run_osint(State(app): State<Arc<App>>, AxPath(id): AxPath<String>) 
     }
 }
 
+async fn run_screenshot(
+    State(app): State<Arc<App>>,
+    AxPath((id, name)): AxPath<(String, String)>,
+) -> Response {
+    let Some(dir) = run_dir(&app.out, &id) else {
+        return (StatusCode::NOT_FOUND, "brak przebiegu").into_response();
+    };
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return (StatusCode::NOT_FOUND, "brak pliku").into_response();
+    }
+    match std::fs::read(dir.join("screenshots").join(&name)) {
+        Ok(bytes) => ([(header::CONTENT_TYPE, "image/png")], bytes).into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "brak zrzutu").into_response(),
+    }
+}
+
 async fn run_report(State(app): State<Arc<App>>, AxPath(id): AxPath<String>) -> Response {
     let Some(dir) = run_dir(&app.out, &id) else {
         return (StatusCode::NOT_FOUND, "brak przebiegu").into_response();
@@ -496,9 +533,17 @@ async fn start_scan(State(app): State<Arc<App>>, Json(req): Json<ScanReq>) -> Re
         max_hosts: req.max_hosts.unwrap_or(settings.max_hosts).clamp(1, 5000),
         depth: req.depth.unwrap_or(settings.depth).clamp(0, 5),
         no_osint: !(req.osint && settings.osint),
+        skip_ports: !settings.ports,
+        ports: settings.ports_list.clone(),
+        skip_tls: !settings.tls,
+        vhosts: settings.vhosts,
+        discovery: settings.discovery,
+        discovery_wordlist: None,
+        screenshots: settings.screenshots,
         profile: crate::cli::Profile::Balanced,
     };
     let extra_paths = settings.extra_paths.clone();
+    let discovery_paths = settings.discovery_paths.clone();
 
     let app2 = app.clone();
     tokio::spawn(async move {
@@ -512,6 +557,7 @@ async fn start_scan(State(app): State<Arc<App>>, Json(req): Json<ScanReq>) -> Re
             args,
             &app2.cancel,
             &extra_paths,
+            &discovery_paths,
         )
         .await;
         let snapshot = log::snapshot();
@@ -589,7 +635,12 @@ async fn scan_status(State(app): State<Arc<App>>, AxPath(id): AxPath<String>) ->
         elapsed,
         logs,
         counts: job.counts.clone(),
-        report: job.report.as_ref().map(|_| format!("/report/{id}")),
+        report: job.report.as_ref().map(|_| {
+            job.run_id
+                .as_ref()
+                .map(|rid| format!("/runs/{rid}/report"))
+                .unwrap_or_else(|| format!("/report/{id}"))
+        }),
         osint: job.osint.as_ref().map(|_| format!("/osint/{id}")),
         run_id: job.run_id.clone(),
         error: job.error.clone(),
@@ -617,7 +668,12 @@ async fn current_job(State(app): State<Arc<App>>) -> Response {
         "elapsed": end.duration_since(job.started).as_secs(),
         "logs": logs,
         "counts": job.counts,
-        "report": job.report.as_ref().map(|_| format!("/report/{}", job.id)),
+        "report": job.report.as_ref().map(|_| {
+            job.run_id
+                .as_ref()
+                .map(|rid| format!("/runs/{rid}/report"))
+                .unwrap_or_else(|| format!("/report/{}", job.id))
+        }),
         "osint": job.osint.as_ref().map(|_| format!("/osint/{}", job.id)),
         "run_id": job.run_id,
         "error": job.error,
@@ -709,6 +765,7 @@ pub async fn serve(resolver: &Resolver, out: PathBuf, args: ServeArgs) -> Result
         .route("/api/keys", get(api_keys))
         .route("/runs/{id}/report", get(run_report))
         .route("/runs/{id}/markdown", get(run_markdown))
+        .route("/runs/{id}/screenshots/{name}", get(run_screenshot))
         .route("/report/{id}", get(report))
         .route("/osint/{id}", get(osint_json))
         .route("/favicon.ico", get(favicon))

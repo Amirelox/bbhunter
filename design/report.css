@@ -985,13 +985,66 @@ h2 {
 }
 
 .tag {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 4px;
+  padding: 1px 4px;
+  border: 1px solid var(--color-line);
+  border-radius: 1px;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9.5px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .tag--in {
   color: var(--color-accent);
+}
+
+.tag--warn {
+  border-color: color-mix(in srgb, var(--color-sev-medium) 35%, transparent);
+  color: var(--color-sev-medium);
+}
+
+.tag--bad {
+  border-color: color-mix(in srgb, var(--color-sev-high) 35%, transparent);
+  color: var(--color-sev-high);
+}
+
+.shots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.shot {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.shot__host {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-block-end: 8px;
+  font-size: 12px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--color-line);
+  background: var(--color-raised);
+}
+
+@media (max-width: 640px) {
+  .shots {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* --- responsywność ------------------------------------------------------ */
@@ -1358,8 +1411,13 @@ h2 {
   .hosts tr,
   .lead,
   .note,
+  .shot,
   .rail section {
     break-inside: avoid;
+  }
+
+  .shots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ledger tbody tr:hover,

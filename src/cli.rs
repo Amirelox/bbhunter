@@ -321,6 +321,34 @@ pub struct ReconArgs {
     #[arg(long = "no-osint")]
     pub no_osint: bool,
 
+    /// Skip the TCP port/service scan (it runs by default).
+    #[arg(long = "no-ports")]
+    pub skip_ports: bool,
+
+    /// Port list, e.g. "22,80,443,8000-8100". Empty uses the built-in common set.
+    #[arg(long, default_value = "")]
+    pub ports: String,
+
+    /// Skip TLS certificate and protocol analysis (it runs by default).
+    #[arg(long = "no-tls")]
+    pub skip_tls: bool,
+
+    /// Brute-force common Host headers against shared IPs.
+    #[arg(long)]
+    pub vhosts: bool,
+
+    /// Brute-force common paths and files beyond the fixed well-known list.
+    #[arg(long)]
+    pub discovery: bool,
+
+    /// Custom content-discovery wordlist (one path per line).
+    #[arg(long, value_name = "FILE")]
+    pub discovery_wordlist: Option<PathBuf>,
+
+    /// Capture headless Chromium screenshots of live hosts.
+    #[arg(long)]
+    pub screenshots: bool,
+
     /// Speed profile; explicit non-default flags win.
     #[arg(long, value_enum, default_value_t = Profile::Balanced)]
     pub profile: Profile,

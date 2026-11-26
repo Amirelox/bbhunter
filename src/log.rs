@@ -57,6 +57,13 @@ fn stage_key(title: &str) -> &'static str {
         "crawl"
     } else if t.contains("low-hanging") {
         "paths"
+    } else if t.contains("port scan")
+        || t.contains("tls")
+        || t.contains("virtual host")
+        || t.contains("content discovery")
+        || t.contains("zrzuty")
+    {
+        "modules"
     } else {
         "other"
     }

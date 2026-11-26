@@ -625,6 +625,37 @@ h3 {
   transform: translateY(-3px);
 }
 
+.surface-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  margin-block-start: 30px;
+  padding-block-start: 18px;
+  border-block-start: 1px solid var(--line);
+}
+
+.surface-strip li {
+  min-width: 0;
+  padding-inline: 14px;
+  border-inline-start: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.surface-strip li:first-child {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.surface-strip b {
+  display: block;
+  margin-block-end: 3px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
 /* --- report -------------------------------------------------------------- */
 .report {
   display: grid;
@@ -1065,6 +1096,16 @@ h3 {
   .pipeline li:nth-child(odd) {
     border-inline-start: 0;
     padding-inline-start: 0;
+  }
+
+  .surface-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 0;
+  }
+
+  .surface-strip li:nth-child(odd) {
+    padding-inline-start: 0;
+    border-inline-start: 0;
   }
 
   .osint,
