@@ -7,7 +7,8 @@ plus a local browser app.
 
 > This is not an exploit framework. It sends no payloads: TCP connects, HTTP requests, Host
 > header probes and one GET per discovered path. Every result is a lead for manual
-> verification, not a confirmed vulnerability. Optional active modules are yours to enable.
+> verification, not a confirmed vulnerability. Surface modules run by default; disable the
+> noisy ones with `--no-vhosts`, `--no-discovery` and `--no-screenshots`.
 
 ## Safety and scope
 
@@ -55,11 +56,11 @@ bbhunter recon -l targets.txt --scope scope.txt
 # quick pass (higher rate, shallow crawl)
 bbhunter recon -d example.com --scope scope.txt --profile fast
 
-# surface modules: ports + TLS by default; opt in to vhosts, discovery, screenshots
-bbhunter recon -d example.com --scope scope.txt --vhosts --discovery --screenshots
+# all surface modules are on by default
+bbhunter recon -d example.com --scope scope.txt
 
-# a quiet HTTP-only pass
-bbhunter recon -d example.com --scope scope.txt --no-ports --no-tls
+# a faster HTTP-only pass
+bbhunter recon -d example.com --scope scope.txt --no-ports --no-tls --no-vhosts --no-discovery --no-screenshots
 
 # single stages
 bbhunter subs  -d example.com --scope scope.txt > subs.txt
@@ -101,15 +102,21 @@ bbhunter recon -d example.com --scope scope.txt \
 | 7. Recursion | `pipeline.rs` | A host found in a link, JS file, robots/sitemap or redirect joins the next round and goes through the same stages. Bounded by `--depth` (2), `--max-hosts` (500); `--no-recurse` disables it |
 | 8. Ports | `ports.rs` | async TCP connect scan + banner grab (34 common services); risky databases/admin ports become findings. `--no-ports`, `--ports 22,80,443,8000-8100` |
 | 9. TLS | `tls.rs` | certificate SANs, issuer, expiry, negotiated version/cipher, TLS 1.0/1.1 and weak-cipher checks. `--no-tls` |
-| 10. Virtual hosts | `vhosts.rs` | scope-filtered Host-header brute force against shared IPs; status/title/length comparison with the baseline. `--vhosts` |
-| 11. Content discovery | `discovery.rs` | soft-404-aware directory/file brute force, backups, configs, admin panels. `--discovery`, `--discovery-wordlist FILE` |
-| 12. Screenshots | `shots.rs` | optional headless Chromium capture; thumbnails are embedded in the report, full PNGs land in `screenshots/`. `--screenshots` |
+| 10. Virtual hosts | `vhosts.rs` | scope-filtered Host-header brute force against shared IPs; status/title/length comparison with the baseline. `--no-vhosts` |
+| 11. Content discovery | `discovery.rs` | soft-404-aware directory/file brute force, backups, configs, admin panels. `--no-discovery`, `--discovery-wordlist FILE` |
+| 12. Screenshots | `shots.rs` | headless Chromium capture; thumbnails are embedded in the report, full PNGs land in `screenshots/`. `--no-screenshots` |
 | 13. Report | `report.rs` | `report.md`, `report.html`, `findings.json`, `hosts.jsonl`, module artifacts and per-bucket files |
 
 Performance notes: pages inside a site are fetched in parallel batches, path checks run four at a
 time per host, passive sources are concurrent and cached for 24 h, aliases are crawled once, and
 OSINT enrichment (ASN/favicons) is parallel. Body reads are capped (512 KB for probe, 1 MB for
 pages and JS).
+
+The surface phase runs in three lanes: TCP/TLS, HTTP modules (vhosts + discovery) and Chromium
+screenshots; a two-host run spends roughly the slowest lane, not their sum. OSINT sources, cloud
+checks and code search run concurrently with 10–12 s caps; brute-force DNS resolves A/AAAA only
+(no CNAME query) with 128 concurrent lookups; legacy TLS 1.0/1.1 probes are capped at 2 s and run
+in parallel.
 
 Crawl and path checks **prioritise** dev/staging/admin/api hosts, and `--paths-hosts` /
 `--crawl-hosts` cap the expensive work per round.
@@ -127,8 +134,9 @@ path-checked again. Findings with the same title and category are grouped in the
 
 ### Surface modules
 
-Port scan and TLS analysis run by default; virtual-host brute force, content discovery and
-screenshots are opt-in. All of them work only on hosts that already passed the allowlist, and
+All surface modules run by default, including virtual-host brute force, content discovery and
+screenshots. Turn them off with `--no-vhosts`, `--no-discovery` or `--no-screenshots` when speed
+matters more than coverage. All of them work only on hosts that already passed the allowlist, and
 virtual-host candidates are checked against the scope before a request is sent.
 
 | Module | Default | Artifacts | Limit / caveat |
@@ -137,9 +145,9 @@ virtual-host candidates are checked against the scope before a request is sent.
 | TLS | on | `tls.json` | OpenSSL; certificates are accepted without validation for analysis; weak versions are attempted separately |
 | WAF/CDN | always | `hosts.jsonl` (`waf`) | passive header/cookie/body signatures only |
 | Fingerprinting | always | `hosts.jsonl`, report | headers, cookies, body markers, crawled static/JS/CSS URLs |
-| Virtual hosts | off | `vhosts.txt`, `vhosts.json` | 8 hosts; Host header only; HTTPS vhosts can need SNI |
-| Content discovery | off | `discovery.txt`, `discovery.json` | 10 hosts, built-in list or `--discovery-wordlist`; soft-404 baseline |
-| Screenshots | off | `screenshots/*.png` | Chromium; set `BBHUNTER_CHROME` or install `chromium`; browser also loads page subresources |
+| Virtual hosts | on | `vhosts.txt`, `vhosts.json` | up to 6 hosts; Host header only; HTTPS vhosts can need SNI |
+| Content discovery | on | `discovery.txt`, `discovery.json` | up to 6 hosts, built-in list or `--discovery-wordlist`; soft-404 baseline |
+| Screenshots | on | `screenshots/*.png` | up to 6 hosts; Chromium required; browser also loads page subresources |
 
 The desktop build needs OpenSSL headers for TLS analysis. Screenshots are skipped with a report
 note when Chromium is not found.

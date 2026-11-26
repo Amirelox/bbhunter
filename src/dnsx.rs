@@ -19,21 +19,25 @@ impl Resolver {
         opts.cache_size = 8192;
         opts.timeout = std::time::Duration::from_secs(3);
         opts.attempts = 2;
-        opts.num_concurrent_reqs = 48;
+        opts.num_concurrent_reqs = 128;
         Self {
             inner: TokioAsyncResolver::tokio(ResolverConfig::default(), opts),
         }
     }
 
     pub async fn resolve(&self, host: &str) -> DnsInfo {
+        let (addrs, cname) = tokio::join!(
+            self.inner.lookup_ip(host),
+            self.inner.lookup(host, RecordType::CNAME)
+        );
         let mut info = DnsInfo::default();
-        if let Ok(addrs) = self.inner.lookup_ip(host).await {
+        if let Ok(addrs) = addrs {
             let mut ips: Vec<String> = addrs.iter().map(|a| a.to_string()).collect();
             ips.sort();
             ips.dedup();
             info.ips = ips;
         }
-        if let Ok(cname) = self.inner.lookup(host, RecordType::CNAME).await {
+        if let Ok(cname) = cname {
             if let Some(rec) = cname.iter().next() {
                 info.cname = Some(rec.to_string().trim_end_matches('.').to_string());
             }
@@ -41,15 +45,30 @@ impl Resolver {
         info
     }
 
+    /// A fast path for brute-force candidates: no CNAME query, only addresses.
+    pub async fn resolve_ips(&self, host: &str) -> Vec<String> {
+        match self.inner.lookup_ip(host).await {
+            Ok(addrs) => {
+                let mut ips: Vec<String> = addrs.iter().map(|a| a.to_string()).collect();
+                ips.sort();
+                ips.dedup();
+                ips
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
     /// IPs served for a randomly named subdomain, used to detect DNS wildcards
     /// so brute-force results are not flooded with false positives.
     pub async fn wildcard_ips(&self, domain: &str) -> Vec<String> {
-        let mut found: Vec<String> = Vec::new();
-        for _ in 0..3 {
-            let probe = format!("bbhunter-{:08x}.{domain}", fastrand::u32(..));
-            let info = self.resolve(&probe).await;
-            found.extend(info.ips);
-        }
+        let probes = [
+            format!("bbhunter-{:08x}.{domain}", fastrand::u32(..)),
+            format!("bbhunter-{:08x}.{domain}", fastrand::u32(..)),
+            format!("bbhunter-{:08x}.{domain}", fastrand::u32(..)),
+        ];
+        let results =
+            futures::future::join_all(probes.iter().map(|probe| self.resolve_ips(probe))).await;
+        let mut found: Vec<String> = results.into_iter().flatten().collect();
         found.sort();
         found.dedup();
         found

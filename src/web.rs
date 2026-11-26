@@ -47,13 +47,13 @@ struct Settings {
     ports_list: String,
     #[serde(default = "default_true")]
     tls: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     vhosts: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     discovery: bool,
     #[serde(default)]
     discovery_paths: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     screenshots: bool,
 }
 
@@ -74,10 +74,10 @@ impl Default for Settings {
             ports: true,
             ports_list: String::new(),
             tls: true,
-            vhosts: false,
-            discovery: false,
+            vhosts: true,
+            discovery: true,
             discovery_paths: Vec::new(),
-            screenshots: false,
+            screenshots: true,
         }
     }
 }
@@ -536,10 +536,10 @@ async fn start_scan(State(app): State<Arc<App>>, Json(req): Json<ScanReq>) -> Re
         skip_ports: !settings.ports,
         ports: settings.ports_list.clone(),
         skip_tls: !settings.tls,
-        vhosts: settings.vhosts,
-        discovery: settings.discovery,
+        skip_vhosts: !settings.vhosts,
+        skip_discovery: !settings.discovery,
         discovery_wordlist: None,
-        screenshots: settings.screenshots,
+        skip_screenshots: !settings.screenshots,
         profile: crate::cli::Profile::Balanced,
     };
     let extra_paths = settings.extra_paths.clone();

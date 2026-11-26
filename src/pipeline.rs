@@ -388,98 +388,130 @@ pub async fn recon(
     let mut module_notes: Vec<String> = Vec::new();
     let module_start = Instant::now();
     if !cancelled {
-        if args.skip_ports {
-            module_notes.push("Port scan był wyłączony (--no-ports).".to_string());
-        } else {
-            log::stage("port scan (TCP connect + banner)");
-            match ports::scan(&hosts, 20, &args.ports, concurrency, 4, scope, cancel).await {
-                Ok(mut scan) => {
-                    log::ok(&format!(
-                        "porty: {} otwartych / {} sprawdzeń na {} hostach",
-                        scan.open.len(),
-                        scan.checked,
-                        scan.hosts
-                    ));
-                    findings.merge(std::mem::take(&mut scan.findings));
-                    port_scan = scan;
-                }
-                Err(e) => {
-                    module_notes.push(format!("Port scan nie uruchomił się: {e:#}"));
-                    log::warn(&format!("port scan: {e:#}"));
-                }
-            }
-        }
-        if args.skip_tls {
-            module_notes.push("Analiza TLS była wyłączona (--no-tls).".to_string());
-        } else {
-            log::stage("TLS (certyfikat, wersje, szyfry)");
-            tls_scan = tls::scan(&hosts, 30, concurrency, 8, scope, cancel).await;
-            log::ok(&format!(
-                "TLS: {} hostów, {} SAN, {} przestarzałych wersji",
-                tls_scan.results.len(),
-                tls_scan.san.len(),
-                tls_scan
-                    .results
-                    .iter()
-                    .filter(|r| !r.weak_versions.is_empty())
-                    .count()
-            ));
-            findings.merge(std::mem::take(&mut tls_scan.findings));
-            for san in &tls_scan.san {
-                if scope.allows(san) {
-                    known.insert(san.clone());
-                    triage.add_host(san);
-                }
-            }
-        }
-        if args.vhosts {
-            log::stage("virtual hosts (Host header)");
-            vhost_scan = vhosts::scan(http, &hosts, 8, concurrency, 8, scope, cancel).await;
-            log::ok(&format!(
-                "vhosty: {} trafień / {} requestów",
-                vhost_scan.hits.len(),
-                vhost_scan.checked
-            ));
-            findings.merge(std::mem::take(&mut vhost_scan.findings));
-            for host in &vhost_scan.discovered {
-                if scope.allows(host) {
-                    known.insert(host.clone());
-                    triage.add_host(host);
-                }
-            }
-        }
-        if args.discovery {
-            log::stage("content discovery (paths + files)");
-            let custom = if discovery_paths.is_empty() {
-                &[][..]
+        // Three independent lanes: TCP/TLS, HTTP surface modules and Chromium.
+        // They share no mutable state until the join, so latency overlaps.
+        let tcp_lane = async {
+            let mut notes = Vec::new();
+            let mut ports_out = PortScan::default();
+            let mut tls_out = TlsScan::default();
+            if args.skip_ports {
+                notes.push("Port scan był wyłączony (--no-ports).".to_string());
             } else {
-                discovery_paths
-            };
-            discovery_scan =
-                discovery::scan(http, &hosts, 10, custom, concurrency, scope, cancel).await;
-            log::ok(&format!(
-                "discovery: {} trafień / {} requestów",
-                discovery_scan.hits.len(),
-                discovery_scan.checked
-            ));
-            findings.merge(std::mem::take(&mut discovery_scan.findings));
-            for hit in &discovery_scan.hits {
-                triage.add_url(&hit.url);
+                log::stage("port scan (TCP connect + banner)");
+                match ports::scan(&hosts, 20, &args.ports, concurrency, 4, scope, cancel).await {
+                    Ok(scan) => {
+                        log::ok(&format!(
+                            "porty: {} otwartych / {} sprawdzeń na {} hostach",
+                            scan.open.len(),
+                            scan.checked,
+                            scan.hosts
+                        ));
+                        ports_out = scan;
+                    }
+                    Err(e) => {
+                        notes.push(format!("Port scan nie uruchomił się: {e:#}"));
+                        log::warn(&format!("port scan: {e:#}"));
+                    }
+                }
+            }
+            if args.skip_tls {
+                notes.push("Analiza TLS była wyłączona (--no-tls).".to_string());
+            } else {
+                log::stage("TLS (certyfikat, wersje, szyfry)");
+                tls_out = tls::scan(&hosts, 30, concurrency, 8, scope, cancel).await;
+                log::ok(&format!(
+                    "TLS: {} wyników, {} SAN, {} z przestarzałą wersją",
+                    tls_out.results.len(),
+                    tls_out.san.len(),
+                    tls_out
+                        .results
+                        .iter()
+                        .filter(|r| !r.weak_versions.is_empty())
+                        .count()
+                ));
+            }
+            (ports_out, tls_out, notes)
+        };
+
+        let http_lane = async {
+            let mut vhost_out = VhostScan::default();
+            let mut discovery_out = DiscoveryScan::default();
+            if !args.skip_vhosts {
+                log::stage("virtual hosts (Host header)");
+                vhost_out = vhosts::scan(http, &hosts, 6, concurrency, 8, scope, cancel).await;
+                log::ok(&format!(
+                    "vhosty: {} trafień / {} requestów",
+                    vhost_out.hits.len(),
+                    vhost_out.checked
+                ));
+            }
+            if !args.skip_discovery {
+                log::stage("content discovery (paths + files)");
+                let custom = if discovery_paths.is_empty() {
+                    &[][..]
+                } else {
+                    discovery_paths
+                };
+                discovery_out =
+                    discovery::scan(http, &hosts, 6, custom, concurrency, scope, cancel).await;
+                log::ok(&format!(
+                    "discovery: {} trafień / {} requestów",
+                    discovery_out.hits.len(),
+                    discovery_out.checked
+                ));
+            }
+            (vhost_out, discovery_out, Vec::new())
+        };
+
+        let shot_lane = async {
+            if args.skip_screenshots {
+                (Vec::new(), Vec::new())
+            } else {
+                log::stage("zrzuty ekranu (Chromium)");
+                let scan = shots::scan(
+                    &hosts,
+                    &out.join(&target_name).join("screenshots"),
+                    6,
+                    scope,
+                    cancel,
+                )
+                .await;
+                log::ok(&format!("zrzuty: {}", scan.shots.len()));
+                (scan.shots, scan.notes)
+            }
+        };
+
+        let (tcp, http_surface, shot_result) = tokio::join!(tcp_lane, http_lane, shot_lane);
+        port_scan = tcp.0;
+        tls_scan = tcp.1;
+        module_notes.extend(tcp.2);
+
+        vhost_scan = http_surface.0;
+        discovery_scan = http_surface.1;
+        module_notes.extend(http_surface.2);
+
+        screenshots = shot_result.0;
+        module_notes.extend(shot_result.1);
+
+        findings.merge(std::mem::take(&mut port_scan.findings));
+        findings.merge(std::mem::take(&mut tls_scan.findings));
+        findings.merge(std::mem::take(&mut vhost_scan.findings));
+        findings.merge(std::mem::take(&mut discovery_scan.findings));
+
+        for san in &tls_scan.san {
+            if scope.allows(san) {
+                known.insert(san.clone());
+                triage.add_host(san);
             }
         }
-        if args.screenshots {
-            log::stage("zrzuty ekranu (Chromium)");
-            let shots = shots::scan(
-                &hosts,
-                &out.join(&target_name).join("screenshots"),
-                10,
-                scope,
-                cancel,
-            )
-            .await;
-            screenshots = shots.shots;
-            module_notes.extend(shots.notes);
-            log::ok(&format!("zrzuty: {}", screenshots.len()));
+        for host in &vhost_scan.discovered {
+            if scope.allows(host) {
+                known.insert(host.clone());
+                triage.add_host(host);
+            }
+        }
+        for hit in &discovery_scan.hits {
+            triage.add_url(&hit.url);
         }
     }
     t_modules += module_start.elapsed();

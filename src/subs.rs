@@ -380,8 +380,8 @@ async fn brute(
                 continue;
             }
             futs.push(async move {
-                let info = resolver.resolve(&host).await;
-                (host, info.ips)
+                let ips = resolver.resolve_ips(&host).await;
+                (host, ips)
             });
         }
         for (host, ips) in futures::future::join_all(futs).await {

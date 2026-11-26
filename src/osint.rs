@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use crate::dnsx::Resolver;
 use crate::http::Http;
@@ -173,7 +174,7 @@ async fn common_crawl(http: &Http, domain: &str) -> (Vec<String>, Option<String>
         .as_array()
         .map(|rows| {
             rows.iter()
-                .take(2)
+                .take(1)
                 .filter_map(|x| x.get("id").and_then(|i| i.as_str()).map(str::to_string))
                 .collect()
         })
@@ -1046,70 +1047,182 @@ pub async fn pre(
     }
 
     if domain_like {
-        log::info("Common Crawl index");
+        log::info("źródła OSINT równolegle: Common Crawl, RDAP, chmura, kod");
     }
-    let (cc, cc_note) = if domain_like {
-        common_crawl(http, domain).await
-    } else {
-        (Vec::new(), None)
+
+    let cc_fut = async {
+        if domain_like {
+            match tokio::time::timeout(Duration::from_secs(10), common_crawl(http, domain)).await {
+                Ok(result) => result,
+                Err(_) => (Vec::new(), Some("Common Crawl: timeout 10 s".to_string())),
+            }
+        } else {
+            (Vec::new(), None)
+        }
     };
-    if let Some(note) = cc_note {
+    let st_fut = async {
+        if domain_like {
+            match tokio::time::timeout(Duration::from_secs(10), security_trails(http, domain)).await
+            {
+                Ok(result) => result,
+                Err(_) => (Vec::new(), Some("SecurityTrails: timeout 10 s".to_string())),
+            }
+        } else {
+            (Vec::new(), None)
+        }
+    };
+    let sh_fut = async {
+        if domain_like {
+            match tokio::time::timeout(Duration::from_secs(10), shodan_dns(http, domain)).await {
+                Ok(result) => result,
+                Err(_) => (Vec::new(), Some("Shodan DNS: timeout 10 s".to_string())),
+            }
+        } else {
+            (Vec::new(), None)
+        }
+    };
+    let vt_fut = async {
+        if domain_like {
+            match tokio::time::timeout(Duration::from_secs(10), virustotal(http, domain)).await {
+                Ok(result) => result,
+                Err(_) => (Vec::new(), Some("VirusTotal: timeout 10 s".to_string())),
+            }
+        } else {
+            (Vec::new(), None)
+        }
+    };
+    let rdap_fut = async {
+        if domain_like {
+            tokio::time::timeout(Duration::from_secs(8), rdap(http, domain))
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        }
+    };
+    let cloud_fut = async {
+        if opts.cloud && domain_like {
+            let names = cloud_candidates(domain);
+            let apex = util::registrable(domain);
+            let count = names.len();
+            let checked = tokio::time::timeout(Duration::from_secs(12), async {
+                let checked: Vec<Vec<CloudHit>> = stream::iter(names.iter().cloned())
+                    .map(|name| {
+                        let apex = apex.clone();
+                        async move { cloud_check(http, &name, &apex).await }
+                    })
+                    .buffer_unordered(12)
+                    .collect()
+                    .await;
+                let mut hits = Vec::new();
+                for group in checked {
+                    hits.extend(group);
+                }
+                hits
+            })
+            .await
+            .unwrap_or_default();
+            (checked, Some(count))
+        } else {
+            (Vec::new(), None)
+        }
+    };
+    let code_fut = async {
+        if opts.dorks && domain_like {
+            let result = tokio::time::timeout(Duration::from_secs(12), async {
+                let ((grep_hits, grep_note), (sc_hits, sc_note), (gh_hits, gh_note)) = tokio::join!(
+                    grep_app(http, domain),
+                    searchcode(http, domain),
+                    github_search(http, domain)
+                );
+                let mut hits = Vec::new();
+                let mut notes = Vec::new();
+                hits.extend(grep_hits);
+                hits.extend(sc_hits);
+                hits.extend(gh_hits);
+                notes.extend(grep_note);
+                notes.extend(sc_note);
+                notes.extend(gh_note);
+                (hits, notes)
+            })
+            .await;
+            result.unwrap_or_else(|_| (Vec::new(), vec!["Code search: timeout 12 s".to_string()]))
+        } else {
+            (Vec::new(), Vec::new())
+        }
+    };
+
+    let (cc, st, sh, vt, rdap_res, cloud, code) =
+        tokio::join!(cc_fut, st_fut, sh_fut, vt_fut, rdap_fut, cloud_fut, code_fut);
+
+    if let Some(note) = cc.1 {
         report.notes.push(note);
     }
-    for url in &cc {
+    for url in &cc.0 {
         if let Some(host) = util::host_of(url) {
             if host == domain || host.ends_with(&format!(".{domain}")) {
                 subs_all.insert(host);
             }
         }
     }
-    log::info(&format!("Common Crawl: {} URL-i", cc.len()));
+    log::info(&format!("Common Crawl: {} URL-i", cc.0.len()));
 
-    log::info("SecurityTrails / VirusTotal / Shodan DNS (jeśli klucze są w env)");
-    let (st, st_note) = if domain_like {
-        security_trails(http, domain).await
-    } else {
-        (Vec::new(), None)
-    };
-    if let Some(note) = st_note {
-        report.notes.push(note);
-    }
-    for host in st {
-        if let Some(h) = util::normalize_host(&host) {
-            if scope.allows(&h) {
-                subs_all.insert(h);
+    for (label, (hosts, note)) in [
+        ("SecurityTrails", st),
+        ("Shodan DNS", sh),
+        ("VirusTotal", vt),
+    ] {
+        if let Some(note) = note {
+            report.notes.push(note);
+        }
+        for host in hosts {
+            if let Some(h) = util::normalize_host(&host) {
+                if scope.allows(&h) {
+                    subs_all.insert(h);
+                }
             }
         }
+        let _ = label;
     }
-    let (sh, sh_note) = if domain_like {
-        shodan_dns(http, domain).await
-    } else {
-        (Vec::new(), None)
-    };
-    if let Some(note) = sh_note {
-        report.notes.push(note);
+
+    if let Some(r) = rdap_res {
+        log::ok(&format!(
+            "rejestrator: {}",
+            r.registrar.as_deref().unwrap_or("nieznany")
+        ));
+        report.rdap = Some(r);
+    } else if domain_like {
+        report.notes.push("RDAP: brak odpowiedzi".to_string());
     }
-    for host in sh {
-        if let Some(h) = util::normalize_host(&host) {
-            if scope.allows(&h) {
-                subs_all.insert(h);
-            }
+
+    if let Some(name_count) = cloud.1 {
+        let mut hits = cloud.0;
+        hits.sort_by(|a, b| a.provider.cmp(b.provider).then(a.name.cmp(&b.name)));
+        for hit in &hits {
+            log::ok(&format!("{}: {} ({})", hit.provider, hit.name, hit.kind));
         }
+        log::ok(&format!(
+            "{} kandydatów, {} istniejących nazw",
+            name_count,
+            hits.len()
+        ));
+        report.cloud = hits;
+        report.notes.push(
+            "Nazwy w chmurze to kandydaci z permutacji domeny; istnienie nie potwierdza własności."
+                .to_string(),
+        );
     }
-    let (vt, vt_note) = if domain_like {
-        virustotal(http, domain).await
-    } else {
-        (Vec::new(), None)
-    };
-    if let Some(note) = vt_note {
-        report.notes.push(note);
-    }
-    for host in vt {
-        if let Some(h) = util::normalize_host(&host) {
-            if scope.allows(&h) {
-                subs_all.insert(h);
-            }
-        }
+
+    if opts.dorks && domain_like {
+        report.dorks = dorks(domain);
+        report.code_hits = code.0;
+        report.notes.extend(code.1);
+        log::ok(&format!(
+            "{} dorków, {} trafień w kodzie",
+            report.dorks.len(),
+            report.code_hits.len()
+        ));
     }
 
     subs_all.insert(domain.to_string());
@@ -1126,82 +1239,6 @@ pub async fn pre(
         report.subdomains.len(),
         report.new_subdomains.len()
     ));
-
-    log::stage("RDAP / WHOIS");
-    match if domain_like {
-        rdap(http, domain).await
-    } else {
-        None
-    } {
-        Some(r) => {
-            log::ok(&format!(
-                "rejestrator: {}",
-                r.registrar.as_deref().unwrap_or("nieznany")
-            ));
-            report.rdap = Some(r);
-        }
-        None => {
-            if domain_like {
-                report.notes.push("RDAP: brak odpowiedzi".to_string());
-            }
-        }
-    }
-
-    if opts.cloud && domain_like {
-        log::stage("Kandydaci nazw w chmurze (S3 / GCS / Azure)");
-        let names = cloud_candidates(domain);
-        let apex = util::registrable(domain);
-        let checked: Vec<Vec<CloudHit>> = stream::iter(names.iter().cloned())
-            .map(|name| {
-                let apex = apex.clone();
-                async move { cloud_check(http, &name, &apex).await }
-            })
-            .buffer_unordered(4)
-            .collect()
-            .await;
-        for hits in checked {
-            for hit in hits {
-                log::ok(&format!("{}: {} ({})", hit.provider, hit.name, hit.kind));
-                report.cloud.push(hit);
-            }
-        }
-        report
-            .cloud
-            .sort_by(|a, b| a.provider.cmp(b.provider).then(a.name.cmp(&b.name)));
-        log::ok(&format!(
-            "{} kandydatów, {} istniejących nazw",
-            names.len(),
-            report.cloud.len()
-        ));
-        report.notes.push(
-            "Nazwy w chmurze to kandydaci z permutacji domeny; istnienie nie potwierdza własności."
-                .to_string(),
-        );
-    }
-
-    if opts.dorks && domain_like {
-        report.dorks = dorks(domain);
-        let (grep_hits, grep_note) = grep_app(http, domain).await;
-        if let Some(note) = grep_note {
-            report.notes.push(note);
-        }
-        report.code_hits.extend(grep_hits);
-        let (sc_hits, sc_note) = searchcode(http, domain).await;
-        if let Some(note) = sc_note {
-            report.notes.push(note);
-        }
-        report.code_hits.extend(sc_hits);
-        let (gh_hits, gh_note) = github_search(http, domain).await;
-        if let Some(note) = gh_note {
-            report.notes.push(note);
-        }
-        report.code_hits.extend(gh_hits);
-        log::ok(&format!(
-            "{} dorków, {} trafień w kodzie",
-            report.dorks.len(),
-            report.code_hits.len()
-        ));
-    }
 
     Ok(report)
 }
@@ -1238,7 +1275,7 @@ pub async fn enrich(
             let info = resolver.resolve(&bare).await;
             (host, info.ips)
         })
-        .buffer_unordered(16)
+        .buffer_unordered(32)
         .collect()
         .await;
     for (host, host_resolved) in resolved {
@@ -1255,7 +1292,7 @@ pub async fn enrich(
             let shodan = internetdb(http, &ip).await;
             (ip, asn, shodan)
         })
-        .buffer_unordered(6)
+        .buffer_unordered(12)
         .collect()
         .await;
     for (_, info, shodan) in lookups {
@@ -1304,7 +1341,7 @@ pub async fn enrich(
                     let hash = fetch_favicon(http, &host).await;
                     (host, hash)
                 })
-                .buffer_unordered(8)
+                .buffer_unordered(16)
                 .collect()
                 .await;
         for (host, hash) in icons {
@@ -1342,60 +1379,68 @@ pub async fn enrich(
         log::ok(&format!("{} grup favicon", report.favicons.len()));
     }
 
-    // Related infrastructure: reverse IP + certificate SANs.
-    let mut seen_related: BTreeSet<String> = report.subdomains.iter().cloned().collect();
+    // Related infrastructure: reverse IP + certificate SANs. These are
+    // independent sources, so they run in parallel instead of one after another.
     log::stage("Powiązane hosty (reverse IP, SAN-y certyfikatów)");
-    for ip in ips.iter().take(3) {
-        if is_private_ip(ip) {
-            continue;
-        }
+    let reverse_ips: Vec<String> = ips
+        .iter()
+        .take(3)
+        .filter(|ip| !is_private_ip(ip))
+        .cloned()
+        .collect();
+    let san_hosts: Vec<String> = hosts
+        .iter()
+        .take(3)
+        .filter_map(|h| util::normalize_host(h))
+        .filter(|h| !util::is_ip(h))
+        .collect();
+
+    let reverse_fut = stream::iter(reverse_ips.into_iter().map(|ip| {
         let url = format!("https://api.hackertarget.com/reverseiplookup/?q={ip}");
-        let Ok(body) = http.source_body(&url, 1_000_000).await else {
-            continue;
-        };
-        if body.contains("error") || body.contains("API count") {
-            continue;
-        }
-        for line in body.lines().take(80) {
-            let name = line.trim().to_ascii_lowercase();
-            if name.is_empty() || name.contains(' ') || !name.contains('.') {
-                continue;
+        async move {
+            let Ok(body) = http.source_body(&url, 1_000_000).await else {
+                return Vec::new();
+            };
+            if body.contains("error") || body.contains("API count") {
+                return Vec::new();
             }
-            if seen_related.insert(name.clone()) && report.related.len() < 80 {
-                report.related.push(Related {
-                    in_scope: scope.allows(&name),
-                    name,
+            body.lines()
+                .take(80)
+                .map(str::trim)
+                .filter(|name| !name.is_empty() && !name.contains(' ') && name.contains('.'))
+                .map(|name| Related {
+                    in_scope: scope.allows(name),
+                    name: name.to_ascii_lowercase(),
                     source: "reverse-ip",
                     note: ip.clone(),
-                });
-            }
+                })
+                .collect()
         }
-    }
+    }))
+    .buffer_unordered(4)
+    .collect::<Vec<Vec<Related>>>();
 
-    for host in hosts.iter().take(3) {
-        let bare = util::normalize_host(host).unwrap_or_else(|| host.clone());
-        if util::is_ip(&bare) {
-            continue;
-        }
+    let san_fut = stream::iter(san_hosts.into_iter().map(|bare| {
         let url = format!("https://crt.sh/?q=%25.{bare}&output=json");
-        let Ok(body) = http.source_body(&url, 6_000_000).await else {
-            continue;
-        };
-        let Ok(json) = serde_json::from_str::<Value>(&body) else {
-            continue;
-        };
-        let Some(rows) = json.as_array() else {
-            continue;
-        };
-        for row in rows.iter().take(200) {
-            if let Some(names) = row.get("name_value").and_then(|v| v.as_str()) {
-                for name in names.lines().take(20) {
-                    let name = name.trim().trim_start_matches("*.").to_ascii_lowercase();
-                    if name.is_empty() || !name.contains('.') || name.len() > 120 {
-                        continue;
-                    }
-                    if seen_related.insert(name.clone()) && report.related.len() < 120 {
-                        report.related.push(Related {
+        async move {
+            let Ok(body) = http.source_body(&url, 4_000_000).await else {
+                return Vec::new();
+            };
+            let Ok(json) = serde_json::from_str::<Value>(&body) else {
+                return Vec::new();
+            };
+            let Some(rows) = json.as_array() else {
+                return Vec::new();
+            };
+            let mut out = Vec::new();
+            for row in rows.iter().take(120) {
+                if let Some(names) = row.get("name_value").and_then(|v| v.as_str()) {
+                    for name in names.lines().take(20) {
+                        let name = name.trim().trim_start_matches("*.").to_ascii_lowercase();
+                        if name.is_empty() || !name.contains('.') || name.len() > 120 {
+                            continue;
+                        }
+                        out.push(Related {
                             in_scope: scope.allows(&name),
                             name,
                             source: "ct-san",
@@ -1404,6 +1449,24 @@ pub async fn enrich(
                     }
                 }
             }
+            out
+        }
+    }))
+    .buffer_unordered(4)
+    .collect::<Vec<Vec<Related>>>();
+
+    let (reverse, sans) = tokio::join!(reverse_fut, san_fut);
+    let mut seen_related: BTreeSet<String> = report.subdomains.iter().cloned().collect();
+    for item in reverse
+        .into_iter()
+        .flatten()
+        .chain(sans.into_iter().flatten())
+    {
+        if report.related.len() >= 120 {
+            break;
+        }
+        if seen_related.insert(item.name.clone()) {
+            report.related.push(item);
         }
     }
     log::ok(&format!("{} powiązanych hostów", report.related.len()));

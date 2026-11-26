@@ -978,7 +978,6 @@
   function modulesHtml() {
     const s = S.settings || {};
     const onByDefault = (v) => (v === false ? "" : " checked");
-    const optIn = (v) => (v ? " checked" : "");
     const row = (id, title, desc, checked, badge = "") => {
       const tag = badge ? "div" : "label";
       return `<${tag} class="module"><div class="module__text"><strong>${title}</strong><span>${desc}</span></div>${
@@ -991,9 +990,9 @@
           <div class="module-list">
             ${row("m-ports", "Skan portów i usług", "Async TCP connect na wspólnym zestawie portów, banner grabbing dla HTTP, SSH, FTP, SMTP i baz danych. To connect scan, nie surowy SYN — nie wymaga roota.", onByDefault(s.ports))}
             ${row("m-tls", "TLS i certyfikaty", "SAN, wystawca, ważność, negocjowana wersja i szyfr. Osobno sprawdzane przestarzałe TLS 1.0/1.1 oraz słabe szyfry.", onByDefault(s.tls))}
-            ${row("m-vhosts", "Wirtualne hosty", "Host header na wspólnym IP: typowe etykiety, porównanie statusu, tytułu i rozmiaru z odpowiedzią bazową. Tylko hosty w zakresie.", optIn(s.vhosts))}
-            ${row("m-discovery", "Content discovery", "Brute-force katalogów i plików z soft-404, rozszerzeniami backupów i limitem hostów. Osobny od stałej listy well-known.", optIn(s.discovery))}
-            ${row("m-shots", "Zrzuty ekranu", "Headless Chromium na żywych hostach; miniatury trafiają do raportu, pełne PNG do katalogu screenshots/. Wymaga Chromium.", optIn(s.screenshots))}
+            ${row("m-vhosts", "Wirtualne hosty", "Host header na wspólnym IP: typowe etykiety, porównanie statusu, tytułu i rozmiaru z odpowiedzią bazową. Tylko hosty w zakresie.", onByDefault(s.vhosts))}
+            ${row("m-discovery", "Content discovery", "Brute-force katalogów i plików z soft-404, rozszerzeniami backupów i limitem hostów. Osobny od stałej listy well-known.", onByDefault(s.discovery))}
+            ${row("m-shots", "Zrzuty ekranu", "Headless Chromium na żywych hostach; miniatury trafiają do raportu, pełne PNG do katalogu screenshots/. Wymaga Chromium.", onByDefault(s.screenshots))}
           </div>
           <div class="form-grid" style="margin-block-start:16px">
             <div class="field"><label for="m-ports-list">Porty</label><input id="m-ports-list" type="text" value="${esc(s.ports_list || "")}" placeholder="puste = wspólny zestaw 34 portów" autocomplete="off" spellcheck="false"><p class="hint">Zakresy dozwolone: <span class="mono">80,443,8000-8100</span>.</p></div>
@@ -1025,7 +1024,7 @@
           <li>Technologie i wersje w odpowiedziach</li>
           <li>WAF/CDN po sygnaturach odpowiedzi</li>
         </ul>
-        <div class="section-note"><strong>Aktywne moduły są opcjonalne poza portami i TLS.</strong> Port scan to connect scan, więc nie wymaga raw sockets. Zrzuty ekranu uruchamiają Chromium dla stron w zakresie, ale przeglądarka ładuje też ich zasoby — traktuj to jak wizytę w przeglądarce. DSL własnych reguł jest nadal zaplanowany.</div>
+        <div class="section-note"><strong>Wszystkie moduły są domyślnie włączone.</strong> Wyłącz je w razie potrzeby — port scan to connect scan, więc nie wymaga raw sockets. Zrzuty ekranu uruchamiają Chromium dla stron w zakresie, ale przeglądarka ładuje też ich zasoby — traktuj to jak wizytę w przeglądarce. DSL własnych reguł jest nadal zaplanowany.</div>
       </section>
     </div>`;
   }

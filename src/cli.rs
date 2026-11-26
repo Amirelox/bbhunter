@@ -333,21 +333,21 @@ pub struct ReconArgs {
     #[arg(long = "no-tls")]
     pub skip_tls: bool,
 
-    /// Brute-force common Host headers against shared IPs.
-    #[arg(long)]
-    pub vhosts: bool,
+    /// Disable virtual-host discovery (it runs by default).
+    #[arg(long = "no-vhosts")]
+    pub skip_vhosts: bool,
 
-    /// Brute-force common paths and files beyond the fixed well-known list.
-    #[arg(long)]
-    pub discovery: bool,
+    /// Disable content discovery (it runs by default).
+    #[arg(long = "no-discovery")]
+    pub skip_discovery: bool,
 
     /// Custom content-discovery wordlist (one path per line).
     #[arg(long, value_name = "FILE")]
     pub discovery_wordlist: Option<PathBuf>,
 
-    /// Capture headless Chromium screenshots of live hosts.
-    #[arg(long)]
-    pub screenshots: bool,
+    /// Disable headless Chromium screenshots (they run by default).
+    #[arg(long = "no-screenshots")]
+    pub skip_screenshots: bool,
 
     /// Speed profile; explicit non-default flags win.
     #[arg(long, value_enum, default_value_t = Profile::Balanced)]

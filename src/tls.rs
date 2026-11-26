@@ -154,17 +154,23 @@ async fn probe_tls(
     let hostname = util::host_of(&host).unwrap_or_else(|| host.clone());
     let std = handshake(&hostname, ip, port, None, timeout).await.ok()?;
     let (san, issuer, subject) = std.cert.as_ref().map(cert_names).unwrap_or_default();
+    let legacy_timeout = timeout.min(Duration::from_secs(2));
+    let (tls10, tls11) = tokio::join!(
+        handshake(&hostname, ip, port, Some(SslVersion::TLS1), legacy_timeout),
+        handshake(
+            &hostname,
+            ip,
+            port,
+            Some(SslVersion::TLS1_1),
+            legacy_timeout
+        )
+    );
     let mut weak_versions = Vec::new();
-    for (version, label) in [
-        (SslVersion::TLS1, "TLS 1.0"),
-        (SslVersion::TLS1_1, "TLS 1.1"),
-    ] {
-        if handshake(&hostname, ip, port, Some(version), timeout)
-            .await
-            .is_ok()
-        {
-            weak_versions.push(label.to_string());
-        }
+    if tls10.is_ok() {
+        weak_versions.push("TLS 1.0".to_string());
+    }
+    if tls11.is_ok() {
+        weak_versions.push("TLS 1.1".to_string());
     }
     let hostname_match =
         san.is_empty() || san.iter().any(|pattern| name_matches(&hostname, pattern));
